@@ -1,4 +1,4 @@
-# XR Publisher Plugin Updater
+# XR Publisher Plugin Publisher
 
 This Local WP add-on enables developers to publish and update 3D plugins for WordPress that extend the "XR Publisher" plugin. It integrates with the app.xr.foundation platform for seamless plugin distribution and updates.
 
