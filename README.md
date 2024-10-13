@@ -31,6 +31,11 @@ This tool bridges the gap between local development and cloud distribution, ensu
    - Specify the relative path to your plugin's metadata JSON file.
    - Example: For a file at `my-xr-plugin/dist/metadata.json`, enter `dist/metadata.json`.
 
+4. Assets path
+   - Specify the relative path to your plugin's image asset files.
+   - Example: For a file at `my-xr-plugin/dist/assets`, enter `dist/assests`.
+
+
 ### Custom Paths
 
 While the add-on provides default paths, you can override these to accommodate custom build structures:
@@ -47,6 +52,11 @@ To use custom paths, simply enter your preferred paths in the respective input f
 3. If validation succeeds, the "Upload Plugin" button will activate.
 4. Click "Upload Plugin" to initiate the publishing process.
 5. Upon completion, you'll receive URLs for your uploaded zip file and metadata.
+
+Once updated the add-on will provide you with a metadata url and your plugin page url. A plugin page is acessible from the following route
+`https://app.xr.foundation/plugins/<your-user-id>/<your-plugin-slug>`
+
+Example live plugin page: https://app.xr.foundation/plugins/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/xr-publisher
 
 ## Enabling Automatic Updates
 

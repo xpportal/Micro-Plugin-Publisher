@@ -1,0 +1,42 @@
+[
+  {
+    "name": "XR Publisher",
+    "slug": "xr-publisher",
+    "version": "2.0-alpha",
+    "author": "<a href=\"https://antpb.com\">antpb</a>",
+    "author_profile": "https://profiles.wordpress.org/antpb/",
+    "requires": "5.0",
+    "tested": "6.7",
+    "requires_php": "7.2",
+    "rating": 0,
+    "num_ratings": 0,
+    "support_threads": 0,
+    "support_threads_resolved": 0,
+    "active_installs": 50,
+    "downloaded": 0,
+    "last_updated": "2024-10-09 12:00pm GMT",
+    "added": "2024-10-09",
+    "homepage": "https://xrpublisher.com/",
+    "short_description": "A WordPress plugin for drag and drop 3D content creation compatible with most XR devices.",
+    "description": "A WordPress plugin for publishing XR content with support for WebXR and popular glTF Extensions.",
+    "download_link": "https://updater.sxp.digital/xr-publisher.zip",
+	"banner": "https://updater.sxp.digital/xr-publisher/banner-772x250.png",
+    "tags": {
+      "tag1": "metaverse",
+      "tag2": "virtual reality"
+    },
+    "donate_link": "https://xrpublisher.com",
+    "contributors": {
+      "yourname": {
+        "profile": "https://profiles.wordpress.org/antpb/",
+        "avatar": "https://secure.gravatar.com/avatar/youravatarhash?s=96&d=monsterid&r=g",
+        "display_name": "antpb"
+      }
+    },
+    "icons": {
+      "1x": "https://updater.sxp.digital/xr-publisher/icon-128x128.png",
+      "2x": "https://updater.sxp.digital/xr-publisher/icon-256x256.png"
+    },
+    "source": "SXP Digital"
+  }
+]
