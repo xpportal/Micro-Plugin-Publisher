@@ -1,0 +1,79 @@
+{
+  "name": "repo-plugin-uploader",
+  "productName": "repo-plugin-uploader",
+  "version": "1.0.0",
+  "author": "Local Team",
+  "keywords": [
+    "local-addon"
+  ],
+  "bgColor": "#51bb7b",
+  "icon": "icon.svg",
+  "slug": "repo-plugin-uploader",
+  "description": "A quick start to your amazing addon!",
+  "renderer": "lib/renderer.js",
+  "main": "lib/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/getflywheel/local-addon-boilerplate"
+  },
+  "bugs": {
+    "url": "https://github.com/getflywheel/local-addon-boilerplate/issues"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc",
+    "watch": "yarn run build --watch",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@getflywheel/eslint-config-local": "1.0.4",
+    "@getflywheel/local": "^9.0.5",
+    "@types/classnames": "^2.2.9",
+    "@types/dateformat": "^3.0.1",
+    "@types/electron-store": "^3.2.0",
+    "@types/react": "^18.2.24",
+    "@typescript-eslint/eslint-plugin": "^6.7.4",
+    "@typescript-eslint/parser": "^6.7.4",
+    "babel-eslint": "^10.1.0",
+    "eslint": "^8.50.0",
+    "eslint-plugin-import": "^2.14.0",
+    "eslint-plugin-react": "^7.11.1",
+    "typescript": "^4"
+  },
+  "peerDependencies": {
+    "react": ">= 16.4.0",
+    "react-dom": ">= 16.4.0",
+    "react-router-dom": "^4.3.1"
+  },
+  "dependencies": {
+    "@getflywheel/local-components": "^17.8.0",
+    "axios": "^1.7.7",
+    "classnames": "^2.2.6",
+    "dateformat": "^3.0.3",
+    "electron-store": "^10.0.0",
+    "fs-extra": "^9.0.1",
+    "lodash": "^4.17.21",
+    "prop-types": "^15.6.2",
+    "react": ">= 16.4.0",
+    "react-dom": ">= 16.4.0",
+    "react-router-dom": "^4.3.1"
+  },
+  "bundledDependencies": [
+    "@getflywheel/local-components",
+    "classnames",
+    "dateformat",
+    "lodash",
+    "prop-types"
+  ],
+  "engines": {
+    "local-by-flywheel": "^5.0.0"
+  },
+  "bundleDependencies": [
+    "@getflywheel/local-components",
+    "classnames",
+    "dateformat",
+    "lodash",
+    "prop-types"
+  ]
+}
