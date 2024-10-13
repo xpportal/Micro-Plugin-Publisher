@@ -208,37 +208,104 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 	}
   });
 
-  addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ pluginName, zipFile, jsonFile, metadata }) => {
+  addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN_ASSETS, async ({ pluginName, assetsPath }) => {
 	try {
-	  console.log('Received upload request for plugin:', pluginName);
-	  console.log('ZIP file size:', zipFile ? zipFile.length : 'undefined');
-	  console.log('JSON file size:', jsonFile ? jsonFile.length : 'undefined');
-	  console.log('Metadata:', metadata);
+	  console.log('Received asset upload request:', { pluginName, assetsPath });
   
+	  const token = store.get(STORE_KEYS.ACCESS_TOKEN);
+	  console.log('Token available:', !!token);
+  
+	  if (!token) {
+		throw new Error('Not authenticated');
+	  }
+  
+	  if (!pluginName) {
+		console.error('Plugin name is missing');
+		throw new Error('Missing plugin name');
+	  }
+  
+	  if (!assetsPath) {
+		console.error('Assets path is missing');
+		throw new Error('Missing assets path');
+	  }
+  
+	  console.log('Attempting to read asset files from:', assetsPath);
+	  const assetFiles = ['banner-1500-620.jpg', 'icon-256x256.jpg'];
+	  const uploadedAssets = [];
+  
+	  for (let i = 0; i < assetFiles.length; i++) {
+		const assetFile = assetFiles[i];
+		const filePath = path.join(assetsPath, assetFile);
+		
+		console.log(`Checking for asset file: ${filePath}`);
+		if (!fs.existsSync(filePath)) {
+		  console.warn(`Asset file not found: ${filePath}`);
+		  continue;
+		}
+  
+		console.log(`Reading asset file: ${filePath}`);
+		const fileContent = await fs.readFile(filePath);
+		const base64Content = fileContent.toString('base64');
+  
+		console.log(`Uploading asset: ${assetFile}`);
+		const assetResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-assets', {
+		  pluginName,
+		  fileName: assetFile,
+		  fileData: base64Content,
+		}, {
+		  headers: {
+			'Content-Type': 'application/json',
+			'Authorization': `Bearer ${token}`,
+		  }
+		});
+  
+		console.log(`Asset upload response for ${assetFile}:`, assetResponse.data);
+  
+		if (!assetResponse.data.success) {
+		  throw new Error(`Failed to upload asset ${assetFile}: ${assetResponse.data.error || 'Unknown error'}`);
+		}
+  
+		uploadedAssets.push(assetResponse.data.assetUrl);
+  
+		console.log(`Successfully uploaded asset: ${assetFile}`);
+	  }
+  
+	  console.log('All assets uploaded successfully');
+	  return { 
+		success: true, 
+		assetsUrl: uploadedAssets 
+	  };
+	} catch (error) {
+	  console.error('Plugin assets upload error:', error);
+	  if (axios.isAxiosError(error)) {
+		console.error('Axios error details:', error.response?.data);
+	  }
+	  return { success: false, error: error instanceof Error ? error.message : String(error) };
+	}
+  });
+
+  addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ pluginName, zipFile, jsonFile, metadata, assetsPath }) => {
+	try {
 	  const token = store.get(STORE_KEYS.ACCESS_TOKEN);
 	  if (!token) {
 		throw new Error('Not authenticated');
 	  }
   
-	  if (!pluginName || !zipFile || !jsonFile || !metadata) {
+	  if (!pluginName || !zipFile || !jsonFile || !metadata || !assetsPath) {
 		throw new Error('Missing required upload data');
 	  }
   
-	  // Upload ZIP file in chunks
+	  // Step 1: Upload ZIP file in chunks
 	  const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
 	  const totalChunks = Math.ceil(zipFile.length / CHUNK_SIZE);
-	  
-	  console.log(`Total chunks calculated: ${totalChunks}`);
 	  
 	  for (let chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
 		const start = (chunkNumber - 1) * CHUNK_SIZE;
 		const end = Math.min(start + CHUNK_SIZE, zipFile.length);
 		const chunk = zipFile.slice(start, end);
 	
-		console.log(`Preparing ZIP chunk ${chunkNumber}/${totalChunks}, start: ${start}, end: ${end}, size: ${chunk.length} bytes`);
 		const base64Chunk = chunk.toString('base64');
 	
-		console.log(`Uploading ZIP chunk ${chunkNumber}/${totalChunks}`);
 		const zipResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-chunk', {
 		  pluginName,
 		  fileData: base64Chunk,
@@ -252,23 +319,19 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 		  }
 		});
 	
-		console.log(`ZIP chunk ${chunkNumber} upload response:`, zipResponse.data);
-	
 		if (!zipResponse.data.success) {
 		  throw new Error(`Failed to upload zip chunk ${chunkNumber}: ${zipResponse.data.error || 'Unknown error'}`);
 		}
   
-		// Send progress update to renderer
 		Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
-		  step: 4,
+		  step: 1,
 		  totalSteps: 4,
 		  chunkNumber,
 		  totalChunks
 		});
 	  }
   
-	  // Upload JSON file
-	  console.log('Uploading JSON file...');
+	  // Step 2: Upload JSON file
 	  const jsonResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-json', {
 		pluginName,
 		jsonData: jsonFile,
@@ -279,14 +342,61 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 		}
 	  });
   
-	  console.log('JSON upload response:', jsonResponse.data);
-  
 	  if (!jsonResponse.data.success) {
 		throw new Error('Failed to upload JSON file: ' + (jsonResponse.data.error || 'Unknown error'));
 	  }
   
-	  // Finalize upload
-	  console.log('Finalizing upload...');
+	  Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
+		step: 2,
+		totalSteps: 4,
+	  });
+  
+    // Step 3: Upload assets
+    console.log('Uploading assets from:', assetsPath);
+    const assetFiles = ['banner-1500x620.jpg', 'icon-256x256.jpg'];
+    const uploadedAssets = [];
+
+    for (let i = 0; i < assetFiles.length; i++) {
+      const assetFile = assetFiles[i];
+      const filePath = path.join(assetsPath, assetFile);
+      
+      if (!fs.existsSync(filePath)) {
+        console.warn(`Asset file not found: ${filePath}`);
+        continue;
+      }
+
+      const fileContent = await fs.readFile(filePath);
+      const base64Content = fileContent.toString('base64');
+
+      console.log(`Uploading asset: ${assetFile}`);
+      const assetResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-assets', {
+        pluginName,
+        fileName: assetFile,
+        fileData: base64Content,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+
+      console.log(`Asset upload response for ${assetFile}:`, assetResponse.data);
+
+      if (!assetResponse.data.success) {
+        throw new Error(`Failed to upload asset ${assetFile}: ${assetResponse.data.error || 'Unknown error'}`);
+      }
+
+      uploadedAssets.push(assetResponse.data.assetUrl);
+
+      Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
+        step: 3,
+        totalSteps: 4,
+        chunkNumber: i + 1,
+        totalChunks: assetFiles.length
+      });
+    }
+  
+	  // Step 4: Finalize upload
 	  const finalizeResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-complete', {
 		pluginName,
 		zipFileSize: zipFile.length,
@@ -298,13 +408,17 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 		}
 	  });
   
-	  console.log('Finalize response:', finalizeResponse.data);
+	  Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
+		step: 4,
+		totalSteps: 4,
+	  });
   
 	  if (finalizeResponse.data.success) {
 		return { 
 		  success: true, 
 		  zipUrl: finalizeResponse.data.zipUrl, 
-		  metadataUrl: finalizeResponse.data.metadataUrl 
+		  metadataUrl: finalizeResponse.data.metadataUrl,
+		  assetsUrl: uploadedAssets
 		};
 	  } else {
 		throw new Error('Failed to finalize plugin upload: ' + (finalizeResponse.data.error || 'Unknown error'));
@@ -317,6 +431,6 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 	  return { success: false, error: error instanceof Error ? error.message : String(error) };
 	}
   });
-	
+  
   console.log('[MAIN] JSON Validator and Plugin Uploader addon initialized');
 }

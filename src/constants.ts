@@ -9,6 +9,7 @@ export const IPC_EVENTS = {
 	READ_ZIP_FILE: 'repo-plugin-uploader:read-zip-file',
 	READ_JSON_FILE: 'repo-plugin-uploader:read-json-file',
 	UPLOAD_PLUGIN: 'repo-plugin-uploader:upload-plugin',
+	UPLOAD_PLUGIN_ASSETS: 'repo-plugin-uploader:upload-plugin-assets',
   };
 
   export const STORE_KEYS = {

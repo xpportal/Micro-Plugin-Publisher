@@ -20,6 +20,7 @@
     "short_description": "A WordPress plugin for drag and drop 3D content creation compatible with most XR devices.",
     "description": "A WordPress plugin for publishing XR content with support for WebXR and popular glTF Extensions.",
     "download_link": "https://updater.sxp.digital/xr-publisher.zip",
+	"banner": "https://updater.sxp.digital/xr-publisher/banner-772x250.png",
     "tags": {
       "tag1": "metaverse",
       "tag2": "virtual reality"
