@@ -15,6 +15,52 @@ This tool bridges the gap between local development and cloud distribution, ensu
 
 ![XR Publisher Preview](docs/assets/xr-publisher-preview.jpg)
 
+## Installation
+
+To install the XR Publisher Plugin Updater add-on:
+
+1. Clone this repository directly into your Local WP add-ons directory:
+   - macOS: `~/Library/Application Support/Local/addons`
+   - Windows: `C:\Users\username\AppData\Roaming\Local\addons`
+   - Linux: `~/.config/Local/addons`
+
+2. Navigate to the cloned directory and install dependencies:
+   ```
+   cd path/to/xr-publisher-plugin-updater
+   yarn install
+   ```
+   or if you prefer npm:
+   ```
+   npm install
+   ```
+
+3. Build the add-on:
+   ```
+   yarn build
+   ```
+   or with npm:
+   ```
+   npm run build
+   ```
+
+4. Restart Local WP.
+
+5. Enable the XR Publisher Plugin Updater add-on in Local's preferences.
+
+If enabling the add-on via the Local UI doesn't work, you can manually enable it by updating the `enabled-addons.json` file. This file is located at:
+
+- macOS: `~/Library/Application Support/Local/enabled-addons.json`
+- Windows: `C:\Users\<username>\AppData\Roaming\Local\addons\enabled-addons.json`
+- Linux: `~/.config/Local/enabled-addons.json`
+
+Make sure the json file includes:
+
+```json
+"xr-publisher-plugin-updater": true
+```
+
+After making these changes, restart Local WP again to ensure the add-on is properly loaded.
+
 ## How to Use
 
 ### Input Fields
@@ -87,52 +133,5 @@ $updater = new xrPublisher\XR_Publisher_Updater(
 ```
 
 Replace the placeholder values with your actual plugin information and the URLs provided by the Plugin Publisher add-on after uploading.
-
-## Installation
-
-To install the XR Publisher Plugin Updater add-on:
-
-1. Clone this repository directly into your Local WP add-ons directory:
-   - macOS: `~/Library/Application Support/Local/addons`
-   - Windows: `C:\Users\username\AppData\Roaming\Local\addons`
-   - Linux: `~/.config/Local/addons`
-
-2. Navigate to the cloned directory and install dependencies:
-   ```
-   cd path/to/xr-publisher-plugin-updater
-   yarn install
-   ```
-   or if you prefer npm:
-   ```
-   npm install
-   ```
-
-3. Build the add-on:
-   ```
-   yarn build
-   ```
-   or with npm:
-   ```
-   npm run build
-   ```
-
-4. Restart Local WP.
-
-5. Enable the XR Publisher Plugin Updater add-on in Local's preferences.
-
-If enabling the add-on via the Local UI doesn't work, you can manually enable it by updating the `enabled-addons.json` file. This file is located at:
-
-- macOS: `~/Library/Application Support/Local/enabled-addons.json`
-- Windows: `C:\Users\<username>\AppData\Roaming\Local\addons\enabled-addons.json`
-- Linux: `~/.config/Local/enabled-addons.json`
-
-Make sure the json file includes:
-
-```json
-"xr-publisher-plugin-updater": true
-```
-
-After making these changes, restart Local WP again to ensure the add-on is properly loaded.
-
 
 For developers looking to contribute or customize the add-on, please refer to the DEVELOPMENT.md file in the repository.
