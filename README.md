@@ -2,6 +2,8 @@
 
 This Local WP add-on enables developers to publish and update 3D plugins for WordPress that extend the "XR Publisher" plugin. It integrates with the app.xr.foundation platform for seamless plugin distribution and updates.
 
+[![Video demo](https://img.youtube.com/vi/1oTkmDNkwyo/0.jpg)](https://www.youtube.com/watch?v=1oTkmDNkwyo)
+
 ## What This Tool Does
 
 The XR Publisher Plugin Updater simplifies the process of deploying and maintaining WordPress plugins specifically designed for XR (Extended Reality) applications. It provides a user-friendly interface within Local WP to:
