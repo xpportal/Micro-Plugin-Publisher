@@ -1,10 +1,10 @@
 # XR Publisher Plugin Updater
 
-This Local by Flywheel add-on enables developers to publish and update 3D plugins for WordPress that extend the "XR Publisher" plugin. It integrates with the app.xr.foundation platform for seamless plugin distribution and updates.
+This Local WP add-on enables developers to publish and update 3D plugins for WordPress that extend the "XR Publisher" plugin. It integrates with the app.xr.foundation platform for seamless plugin distribution and updates.
 
 ## What This Tool Does
 
-The XR Publisher Plugin Updater simplifies the process of deploying and maintaining WordPress plugins specifically designed for XR (Extended Reality) applications. It provides a user-friendly interface within Local by Flywheel to:
+The XR Publisher Plugin Updater simplifies the process of deploying and maintaining WordPress plugins specifically designed for XR (Extended Reality) applications. It provides a user-friendly interface within Local WP to:
 
 1. Validate your plugin's metadata
 2. Upload your plugin files to the SXP Digital platform
@@ -77,11 +77,11 @@ This add-on is distributed through GitHub releases. To install:
 
 1. Visit the GitHub repository and download the latest release.
 2. Extract the downloaded file.
-3. Place the extracted folder in your Local by Flywheel add-ons directory:
+3. Place the extracted folder in your Local WP add-ons directory:
    - macOS: `~/Library/Application Support/Local/addons`
    - Windows: `C:\Users\username\AppData\Roaming\Local\addons`
    - Linux: `~/.config/Local/addons`
-4. Restart Local by Flywheel.
+4. Restart Local WP.
 5. Enable the XR Publisher Plugin Updater add-on in Local's preferences.
 
 For developers looking to contribute or customize the add-on, please refer to the DEVELOPMENT.md file in the repository.
