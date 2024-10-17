@@ -208,6 +208,33 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 	}
   });
 
+  const uploadFile = async (url, data, token) => {
+	try {
+	  console.log(`Attempting to upload file to ${url}`);
+	  const response = await axios.post(url, data, {
+		headers: {
+		  'Content-Type': 'application/json',
+		  'Authorization': `Bearer ${token}`,
+		}
+	  });
+	  console.log('Upload response:', response.data);
+	  if (!response.data.success) {
+		throw new Error(`Upload failed: ${response.data.error || 'Unknown error'}`);
+	  }
+	  return response.data;
+	} catch (error) {
+	  console.error('Upload error:', error);
+	  if (axios.isAxiosError(error)) {
+		console.error('Axios error details:', {
+		  response: error.response?.data,
+		  request: error.request,
+		  config: error.config
+		});
+	  }
+	  throw error;
+	}
+  };
+	
   addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN_ASSETS, async ({ pluginName, assetsPath }) => {
 	try {
 	  console.log('Received asset upload request:', { pluginName, assetsPath });
@@ -284,14 +311,14 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 	}
   });
 
-  addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ pluginName, zipFile, jsonFile, metadata, assetsPath }) => {
+  addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ pluginName, zipFile, jsonFile, metadata, assetsPath, authorData }) => {
 	try {
 	  const token = store.get(STORE_KEYS.ACCESS_TOKEN);
 	  if (!token) {
 		throw new Error('Not authenticated');
 	  }
   
-	  if (!pluginName || !zipFile || !jsonFile || !metadata || !assetsPath) {
+	  if (!pluginName || !zipFile || !jsonFile || !metadata || !assetsPath || !authorData) {
 		throw new Error('Missing required upload data');
 	  }
   
@@ -325,7 +352,7 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
   
 		Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
 		  step: 1,
-		  totalSteps: 4,
+		  totalSteps: 5,
 		  chunkNumber,
 		  totalChunks
 		});
@@ -348,55 +375,70 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
   
 	  Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
 		step: 2,
-		totalSteps: 4,
+		totalSteps: 5,
 	  });
   
-    // Step 3: Upload assets
-    console.log('Uploading assets from:', assetsPath);
-    const assetFiles = ['banner-1500x620.jpg', 'icon-256x256.jpg'];
-    const uploadedAssets = [];
-
-    for (let i = 0; i < assetFiles.length; i++) {
-      const assetFile = assetFiles[i];
-      const filePath = path.join(assetsPath, assetFile);
-      
-      if (!fs.existsSync(filePath)) {
-        console.warn(`Asset file not found: ${filePath}`);
-        continue;
-      }
-
-      const fileContent = await fs.readFile(filePath);
-      const base64Content = fileContent.toString('base64');
-
-      console.log(`Uploading asset: ${assetFile}`);
-      const assetResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-assets', {
-        pluginName,
-        fileName: assetFile,
-        fileData: base64Content,
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        }
-      });
-
-      console.log(`Asset upload response for ${assetFile}:`, assetResponse.data);
-
-      if (!assetResponse.data.success) {
-        throw new Error(`Failed to upload asset ${assetFile}: ${assetResponse.data.error || 'Unknown error'}`);
-      }
-
-      uploadedAssets.push(assetResponse.data.assetUrl);
-
-      Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
-        step: 3,
-        totalSteps: 4,
-        chunkNumber: i + 1,
-        totalChunks: assetFiles.length
-      });
-    }
+	  // Step 3: Update author info
+	  const authorInfoResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/update-author-info', {
+		pluginName,
+		authorData
+	  }, {
+		headers: {
+		  'Content-Type': 'application/json',
+		  'Authorization': `Bearer ${token}`,
+		}
+	  });
   
-	  // Step 4: Finalize upload
+	  if (!authorInfoResponse.data.success) {
+		throw new Error('Failed to update author info: ' + (authorInfoResponse.data.error || 'Unknown error'));
+	  }
+  
+	  Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
+		step: 3,
+		totalSteps: 5,
+	  });
+  
+	  // Step 4: Upload assets
+	  const assetFiles = ['banner-1500x620.jpg', 'icon-256x256.jpg'];
+	  const uploadedAssets = [];
+  
+	  for (let i = 0; i < assetFiles.length; i++) {
+		const assetFile = assetFiles[i];
+		const filePath = path.join(assetsPath, assetFile);
+		
+		if (!fs.existsSync(filePath)) {
+		  continue;
+		}
+  
+		const fileContent = await fs.readFile(filePath);
+		const base64Content = fileContent.toString('base64');
+  
+		const assetResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-assets', {
+		  pluginName,
+		  fileName: assetFile,
+		  fileData: base64Content,
+		}, {
+		  headers: {
+			'Content-Type': 'application/json',
+			'Authorization': `Bearer ${token}`,
+		  }
+		});
+  
+		if (!assetResponse.data.success) {
+		  throw new Error(`Failed to upload asset ${assetFile}: ${assetResponse.data.error || 'Unknown error'}`);
+		}
+  
+		uploadedAssets.push(assetResponse.data.assetUrl);
+		
+		Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
+		  step: 4,
+		  totalSteps: 5,
+		  chunkNumber: i + 1,
+		  totalChunks: assetFiles.length
+		});
+	  }
+  
+	  // Step 5: Finalize upload
 	  const finalizeResponse = await axios.post('https://cfdb.sxpdigital.workers.dev/plugin-upload-complete', {
 		pluginName,
 		zipFileSize: zipFile.length,
@@ -409,8 +451,8 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 	  });
   
 	  Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
-		step: 4,
-		totalSteps: 4,
+		step: 5,
+		totalSteps: 5,
 	  });
   
 	  if (finalizeResponse.data.success) {
@@ -431,6 +473,6 @@ addIpcAsyncListener(IPC_EVENTS.LOGIN, async ({ email, password }) => {
 	  return { success: false, error: error instanceof Error ? error.message : String(error) };
 	}
   });
-  
+	  
   console.log('[MAIN] JSON Validator and Plugin Uploader addon initialized');
 }

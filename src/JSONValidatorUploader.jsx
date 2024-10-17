@@ -4,6 +4,7 @@ import { ipcAsync } from '@getflywheel/local/renderer';
 import { Button, FlyModal, Title, Text, InputPasswordToggle, BasicInput, Divider, CopyInput, ProgressBar } from '@getflywheel/local-components';
 import { IPC_EVENTS } from './constants';
 import path from 'path';
+import fs from 'fs-extra';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -12,7 +13,9 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
   const [password, setPassword] = useState('');
   const [uploadProgress, setUploadProgress] = useState({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
   const [pluginPageUrl, setPluginPageUrl] = useState('');
-
+  const [authorPageUrl, setAuthorPageUrl] = useState('');
+  const [authorInfoPath, setAuthorInfoPath] = useState('');
+  const [authorInfoUploadStatus, setAuthorInfoUploadStatus] = useState('');
 
   const getDefaultPaths = useCallback((siteName) => {
     console.log('siteName:', siteName);
@@ -21,7 +24,8 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
       pluginName,
       zipPath: `plugin-build/zip/${pluginName}.zip`,
       jsonPath: `plugin-build/json/${pluginName}.json`,
-      assetsPath: 'plugin-build/assets'
+      assetsPath: 'plugin-build/assets',
+	  authorInfoPath: `plugin-build/json/author_info.json`,
     };
   }, []);
 
@@ -34,6 +38,7 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
       pluginName: defaults.pluginName,
       zipFilePath: defaults.zipPath,
       jsonFilePath: defaults.jsonPath,
+	  authorInfoPath: defaults.authorInfoPath,
       assetsPath: defaults.assetsPath,
       isJsonValid: false,
       jsonData: {},
@@ -143,74 +148,93 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
   }, []);
   
   const handleUpload = useCallback(async () => {
-	if (!state.isLoggedIn) {
-	  setState(prevState => ({ ...prevState, showLoginModal: true }));
-	  return;
-	}
+    if (!state.isLoggedIn) {
+      setState(prevState => ({ ...prevState, showLoginModal: true }));
+      return;
+    }
 
-	try {
-	  setState(prevState => ({ ...prevState, uploadStatus: 'Preparing files...' }));
-	  setUploadProgress({ step: 0, totalSteps: 4, chunkNumber: 0, totalChunks: 0 });
-  
-	  let basePath = site.path;
-	  if (!basePath) {
-		console.warn('site.path is undefined, using a fallback path');
-		basePath = process.env.HOME || process.env.USERPROFILE || '/';
-	  }
-  
-	  const pluginPath = path.join(basePath, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName);
-	  const fullZipPath = path.join(pluginPath, state.zipFilePath);
-	  const fullJsonPath = path.join(pluginPath, state.jsonFilePath);
-	  const fullAssetsPath = path.join(pluginPath, state.assetsPath);
-  
-	  console.log('ZIP file path:', fullZipPath);
-	  console.log('JSON file path:', fullJsonPath);
-	  console.log('Assets path:', fullAssetsPath);
-  
-	  if (!state.zipFilePath || !state.jsonFilePath || !state.assetsPath) {
-		throw new Error('ZIP, JSON, or assets file path is missing');
-	  }
-  
-	  // Read and upload ZIP file
-	  setState(prevState => ({ ...prevState, uploadStatus: 'Reading ZIP file...' }));
-	  const zipFileResult = await ipcAsync(IPC_EVENTS.READ_ZIP_FILE, { zipPath: fullZipPath });
-	  if (!zipFileResult.success) {
-		throw new Error(zipFileResult.error || 'Failed to read ZIP file');
-	  }
-  
-	  // Read and upload JSON file
-	  setState(prevState => ({ ...prevState, uploadStatus: 'Reading JSON file...' }));
-	  const jsonFileResult = await ipcAsync(IPC_EVENTS.READ_JSON_FILE, { jsonPath: fullJsonPath });
-	  if (!jsonFileResult.success) {
-		throw new Error(jsonFileResult.error || 'Failed to read JSON file');
-	  }
-  
-	  // Prepare metadata
-	  setState(prevState => ({ ...prevState, uploadStatus: 'Preparing metadata...' }));
-	  let metadata;
-	  try {
-		metadata = {
-		  pluginName: state.pluginName,
-		  ...JSON.parse(jsonFileResult.content)
-		};
-	  } catch (error) {
-		console.error('Error parsing JSON content:', error);
-		throw new Error('Failed to parse JSON content');
-	  }
-  
-	  // Upload plugin (ZIP and JSON)
-	  setState(prevState => ({ ...prevState, uploadStatus: 'Uploading plugin...' }));
-	  const uploadResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN, {
-		pluginName: state.pluginName,
-		zipFile: zipFileResult.content,
-		jsonFile: jsonFileResult.content,
-		metadata: metadata,
-		assetsPath: fullAssetsPath 
-	  });
-	
-	  if (!uploadResult.success) {
-		throw new Error(uploadResult.error || 'Failed to upload plugin');
-	  }
+    try {
+      setState(prevState => ({ ...prevState, uploadStatus: 'Preparing files...' }));
+      setUploadProgress({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
+
+      let basePath = site.path;
+      if (!basePath) {
+        console.warn('site.path is undefined, using a fallback path');
+        basePath = process.env.HOME || process.env.USERPROFILE || '/';
+      }
+
+      const pluginPath = path.join(basePath, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName);
+      const fullZipPath = path.join(pluginPath, state.zipFilePath);
+      const fullJsonPath = path.join(pluginPath, state.jsonFilePath);
+      const fullAssetsPath = path.join(pluginPath, state.assetsPath);
+      const fullAuthorInfoPath = path.join(pluginPath, state.authorInfoPath);
+
+      console.log('ZIP file path:', fullZipPath);
+      console.log('JSON file path:', fullJsonPath);
+      console.log('Assets path:', fullAssetsPath);
+      console.log('Author Info file path:', fullAuthorInfoPath);
+
+      if (!state.zipFilePath || !state.jsonFilePath || !state.assetsPath || !state.authorInfoPath) {
+        throw new Error('ZIP, JSON, assets, or author info file path is missing');
+      }
+
+      // Read and upload ZIP file
+      setState(prevState => ({ ...prevState, uploadStatus: 'Reading ZIP file...' }));
+      const zipFileResult = await ipcAsync(IPC_EVENTS.READ_ZIP_FILE, { zipPath: fullZipPath });
+      if (!zipFileResult.success) {
+        throw new Error(zipFileResult.error || 'Failed to read ZIP file');
+      }
+
+      // Read and upload JSON file
+      setState(prevState => ({ ...prevState, uploadStatus: 'Reading JSON file...' }));
+      const jsonFileResult = await ipcAsync(IPC_EVENTS.READ_JSON_FILE, { jsonPath: fullJsonPath });
+      if (!jsonFileResult.success) {
+        throw new Error(jsonFileResult.error || 'Failed to read JSON file');
+      }
+
+      // Read author info file
+      setState(prevState => ({ ...prevState, uploadStatus: 'Reading author info file...' }));
+      const authorInfoResult = await ipcAsync(IPC_EVENTS.READ_JSON_FILE, { jsonPath: fullAuthorInfoPath });
+      if (!authorInfoResult.success) {
+        throw new Error(authorInfoResult.error || 'Failed to read author info file');
+      }
+
+      // Parse author info
+      let authorData;
+      try {
+        authorData = JSON.parse(authorInfoResult.content);
+      } catch (error) {
+        console.error('Error parsing author info JSON content:', error);
+        throw new Error('Failed to parse author info JSON content');
+      }
+
+      // Prepare metadata
+      setState(prevState => ({ ...prevState, uploadStatus: 'Preparing metadata...' }));
+      let metadata;
+      try {
+        metadata = {
+          pluginName: state.pluginName,
+          ...JSON.parse(jsonFileResult.content)
+        };
+      } catch (error) {
+        console.error('Error parsing JSON content:', error);
+        throw new Error('Failed to parse JSON content');
+      }
+
+      // Upload plugin (ZIP, JSON, and author info)
+      setState(prevState => ({ ...prevState, uploadStatus: 'Uploading plugin...' }));
+      const uploadResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN, {
+        pluginName: state.pluginName,
+        zipFile: zipFileResult.content,
+        jsonFile: jsonFileResult.content,
+        metadata: metadata,
+        assetsPath: fullAssetsPath,
+        authorData: authorData
+      });
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Failed to upload plugin');
+      }
   
 	  // Explicitly upload assets
 	  setState(prevState => ({ ...prevState, uploadStatus: 'Uploading assets...' }));
@@ -228,8 +252,7 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 	  if (!assetsResult.success) {
 		throw new Error(assetsResult.error || 'Failed to upload assets');
 	  }
-
-
+  
 	  // Extract userId from assetsUrl
 	  let userId = '';
 	  if (Array.isArray(assetsResult.assetsUrl) && assetsResult.assetsUrl.length > 0) {
@@ -239,10 +262,11 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 	  } else {
 		console.error('assetsResult.assetsUrl is not a valid array:', assetsResult.assetsUrl);
 	  }
-
+  
 	  const publishedPluginPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}/${state.pluginName}` : '';
-
+	  const publishedAuthorPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}` : '';
 	  setPluginPageUrl(publishedPluginPageUrl);
+	  setAuthorPageUrl(publishedAuthorPageUrl);
 	  setState(prevState => ({ 
 		...prevState, 
 		uploadStatus: 'Upload successful',
@@ -250,14 +274,14 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 		metadataUrl: uploadResult.metadataUrl,
 		assetsUrl: assetsResult.assetsUrl,
 	  }));
-	  setUploadProgress(prev => ({ ...prev, step: 4, totalSteps: 4 }));
+	  setUploadProgress(prev => ({ ...prev, step: 5, totalSteps: 5 }));
   
 	} catch (error) {
-		console.error('Upload error:', error);
-		setState(prevState => ({ ...prevState, uploadStatus: `Upload failed: ${error.message}` }));
+	  console.error('Upload error:', error);
+	  setState(prevState => ({ ...prevState, uploadStatus: `Upload failed: ${error.message}` }));
 	}
-}, [state.isLoggedIn, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.pluginName, site.path]);
-  
+}, [state.isLoggedIn, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, site.path]);
+
   useEffect(() => {
 	const handleProgressUpdate = (event, progress) => {
 	  setUploadProgress(progress);
@@ -314,6 +338,7 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 
     initializeState();
   }, []);
+
 
   return (
 		<div style={{ flex: '1', overflowY: 'auto', margin: '10px' }}>
@@ -381,8 +406,16 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 			onChange={(e) => handleInputChange(e, 'assetsPath')}
 			aria-label="Assets Path input"
 			/>
+			<BasicInput
+			label="Author Info File Path"
+			value={state.authorInfoPath}
+			placeholder='Author Info File Path'
+			onChange={(e) => handleInputChange(e, 'authorInfoPath')}
+			aria-label="Author Info File Path input"
+			/>
 			<div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
 			<Button onClick={validateJson}>Validate JSON</Button>
+			{/* {state.isLoggedIn && <Button onClick={handleAuthorInfoUpload}>Upload Author Info</Button>} */}
 			{state.isLoggedIn && state.isJsonValid && <Button onClick={handleUpload}>Upload Plugin</Button>}
 			</div>
 		</div>
@@ -399,9 +432,10 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 				<Text size="s">{state.isLoggedIn ? 'Logged In' : 'Not Logged In'}</Text>
 				
 				<Text size="s" style={{ fontWeight: 'bold' }}>Upload Status:</Text>
-				<Text size="s">{state.uploadStatus || 'N/A'}</Text>
+				<Text size="s">{state.uploadStatus || 'pending'}</Text>
 				
 				<Text size="s" style={{ fontWeight: 'bold' }}>Upload Progress:</Text>
+
 				<div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
 				<ProgressBar 
 					progress={(uploadProgress.step / uploadProgress.totalSteps) * 100} 
@@ -454,9 +488,16 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 					/>
 				</>
 				)}
-
-
-
+				{authorPageUrl && (
+				<>
+					<Text size="s" style={{ fontWeight: 'bold' }}>Author Page:</Text>
+					<CopyInput
+					value={authorPageUrl}
+					aria-label="Author Page"
+					style={{ width: '100%' }}
+					/>
+				</>
+				)}
 			</div>
 		</div>
 		</div>
