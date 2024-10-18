@@ -1,0 +1,20 @@
+name = "micro-plugin-publisher"
+main = "src/worker.js"
+compatibility_date = "2023-05-18"
+account_id = "95d5ca589c39bf4189b080cfc8417c8e"
+node_compat = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[vars]
+PLUGIN_BUCKET_URL = "https://micro-plugin-publisher.95d5ca589c39bf4189b080cfc8417c8e.r2.cloudflarestorage.com"
+
+[[r2_buckets]]
+binding = "PLUGIN_BUCKET"
+bucket_name = "micro-plugin-publisher-bucket"
+preview_bucket_name = "micro-plugin-publisher-bucket-preview"
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
