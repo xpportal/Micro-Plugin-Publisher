@@ -12,11 +12,11 @@ export const IPC_EVENTS = {
 	UPLOAD_PLUGIN_ASSETS: 'repo-plugin-uploader:upload-plugin-assets',
 };
 
-  export const STORE_KEYS = {
+export const STORE_KEYS = {
 	API_KEY: 'apiKey',
 	TOKEN: 'token',
 	USER_ID: 'userID',
 	ACCESS_TOKEN: 'access_token',
 	REFRESH_TOKEN: 'refresh_token',
 	TOKEN_EXPIRY_TIME: 'tokenExpiryTime',
-  };
+};
