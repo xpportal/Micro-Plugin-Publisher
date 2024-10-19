@@ -76,7 +76,7 @@ Consult the [Local add-on API](https://getflywheel.github.io/local-addon-api) fo
 To set up your own plugin distribution API:
 
 1. Navigate to the `api` directory.
-2. Follow the instructions in `API_SETUP.md` to deploy the worker and R2 bucket using Cloudflare.
+2. Follow the instructions in `api/README.md` to deploy the worker and R2 bucket using Cloudflare.
 
 ## Enabling Automatic Updates
 
@@ -125,7 +125,7 @@ This project is licensed under the MIT License. See the LICENSE file for details
 
 For issues or assistance:
 
-1. Check the Troubleshooting section in API_SETUP.md
+1. Check the Troubleshooting section in api/README.md
 2. Open an issue on the GitHub repository
 3. Consult the Local WP documentation for add-on related queries
 
