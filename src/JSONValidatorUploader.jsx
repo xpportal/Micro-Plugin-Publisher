@@ -1,31 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import * as Local from '@getflywheel/local';
 import { ipcAsync } from '@getflywheel/local/renderer';
-import { Button, FlyModal, Title, Text, InputPasswordToggle, BasicInput, Divider, CopyInput, ProgressBar } from '@getflywheel/local-components';
+import { Button, Title, Text, BasicInput, Divider, CopyInput, ProgressBar } from '@getflywheel/local-components';
 import { IPC_EVENTS } from './constants';
 import path from 'path';
 import fs from 'fs-extra';
 
 const { ipcRenderer } = window.require('electron');
 
-const JSONValidatorUploader = ({ site = {}, context }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+const RepoPluginUploader = ({ site = {}, context }) => {
   const [uploadProgress, setUploadProgress] = useState({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
   const [pluginPageUrl, setPluginPageUrl] = useState('');
   const [authorPageUrl, setAuthorPageUrl] = useState('');
-  const [authorInfoPath, setAuthorInfoPath] = useState('');
-  const [authorInfoUploadStatus, setAuthorInfoUploadStatus] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [apiUrl, setApiUrl] = useState('');
 
   const getDefaultPaths = useCallback((siteName) => {
     console.log('siteName:', siteName);
-    const pluginName = siteName || 'xr-publisher';
+    const pluginName = siteName || 'xr-chess-block';
     return {
       pluginName,
       zipPath: `plugin-build/zip/${pluginName}.zip`,
       jsonPath: `plugin-build/json/${pluginName}.json`,
       assetsPath: 'plugin-build/assets',
-	  authorInfoPath: `plugin-build/json/author_info.json`,
+      authorInfoPath: `plugin-build/json/author_info.json`,
     };
   }, []);
 
@@ -35,22 +33,34 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
     return {
       siteId: site.id || '',
       sitePath: site.path || '',
+      userId: '', // New field for userId/organization
       pluginName: defaults.pluginName,
       zipFilePath: defaults.zipPath,
       jsonFilePath: defaults.jsonPath,
-	  authorInfoPath: defaults.authorInfoPath,
+      authorInfoPath: defaults.authorInfoPath,
       assetsPath: defaults.assetsPath,
       isJsonValid: false,
       jsonData: {},
-      isLoggedIn: false,
-      showLoginModal: false,
       uploadStatus: '',
-      loginError: '',
       zipUrl: '',
       metadataUrl: '',
       assetsUrl: '',
     };
   });
+
+  useEffect(() => {
+    const loadEnvironmentVariables = async () => {
+      const envPath = path.join(site.path, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName, '.env');
+      if (fs.existsSync(envPath)) {
+        const envContent = await fs.readFile(envPath, 'utf8');
+        const envVars = dotenv.parse(envContent);
+        setApiKey(envVars.API_KEY);
+        setApiUrl(envVars.PLUGIN_API_URL);
+      }
+    };
+
+    loadEnvironmentVariables();
+  }, [site.path, state.pluginName]);
 
   const validateJson = useCallback(async () => {
     if (!state.jsonFilePath || !state.pluginName) {
@@ -91,68 +101,40 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
     });
   }, [getDefaultPaths]);
 
-  const handleLogin = useCallback(async () => {
-    console.log('[RENDERER] Login button clicked');
-    try {
-      const response = await ipcAsync(IPC_EVENTS.LOGIN, { email, password });
-      if (response.success) {
-        setState(prevState => ({ 
-          ...prevState,
-          isLoggedIn: true,
-          showLoginModal: false,
-          loginError: '',
-        }));
-        console.log('[RENDERER] Login successful');
-      } else {
-        setState(prevState => ({ ...prevState, loginError: 'Login failed. Please try again.' }));
-        console.log('[RENDERER] Login failed');
-      }
-    } catch (error) {
-      console.error('[RENDERER] Login error:', error);
-      setState(prevState => ({ ...prevState, loginError: 'An error occurred during login. Please try again.' }));
-    }
-  }, [email, password]);
-
-  const handleLogout = useCallback(async () => {
-    console.log('[RENDERER] Logout button clicked');
-    try {
-      await ipcAsync(IPC_EVENTS.LOGOUT);
-      setState(prevState => ({ ...prevState, isLoggedIn: false }));
-      console.log('[RENDERER] Logout successful');
-    } catch (error) {
-      console.error('[RENDERER] Logout error:', error);
-    }
-  }, []);
-
   useEffect(() => {
-	const handleProgressUpdate = (event, progress) => {
-	  setUploadProgress(progress);
-	  let newStatus = '';
-	  if (progress.step === 1) {
-		newStatus = `Uploading ZIP file... (${progress.chunkNumber}/${progress.totalChunks})`;
-	  } else if (progress.step === 2) {
-		newStatus = 'Uploading JSON file...';
-	  } else if (progress.step === 3) {
-		newStatus = `Uploading assets... (${progress.chunkNumber}/${progress.totalChunks})`;
-	  } else if (progress.step === 4) {
-		newStatus = 'Finalizing upload...';
-	  }
-	  setState(prevState => ({ ...prevState, uploadStatus: newStatus }));
-	};
+    const handleProgressUpdate = (event, progress) => {
+      setUploadProgress(progress);
+      setState(prevState => {
+        let newStatus = prevState.uploadStatus;
+        switch(progress.step) {
+          case 1:
+            newStatus = `Uploading ZIP file... (${progress.chunkNumber}/${progress.totalChunks})`;
+            break;
+          case 2:
+            newStatus = 'Uploading JSON file...';
+            break;
+          case 3:
+            newStatus = `Uploading assets... (${progress.chunkNumber}/${progress.totalChunks})`;
+            break;
+          case 4:
+            newStatus = 'Finalizing upload...';
+            break;
+          case 5:
+            newStatus = 'Upload complete';
+            break;
+        }
+        return { ...prevState, uploadStatus: newStatus };
+      });
+    };
   
-	ipcRenderer.on('upload-progress', handleProgressUpdate);
+    ipcRenderer.on('upload-progress', handleProgressUpdate);
   
-	return () => {
-	  ipcRenderer.removeListener('upload-progress', handleProgressUpdate);
-	};
+    return () => {
+      ipcRenderer.removeListener('upload-progress', handleProgressUpdate);
+    };
   }, []);
-  
-  const handleUpload = useCallback(async () => {
-    if (!state.isLoggedIn) {
-      setState(prevState => ({ ...prevState, showLoginModal: true }));
-      return;
-    }
 
+  const handleUpload = useCallback(async () => {
     try {
       setState(prevState => ({ ...prevState, uploadStatus: 'Preparing files...' }));
       setUploadProgress({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
@@ -164,6 +146,25 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
       }
 
       const pluginPath = path.join(basePath, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName);
+
+      // use the env from the pluginPath/.env file
+      const envPath = path.join(pluginPath, '.env');
+      console.log('Reading .env file:', envPath);
+      if (fs.existsSync(envPath)) {
+        const env = fs.readFileSync(envPath, 'utf8');
+        const envLines = env.split('\n');
+        envLines.forEach((line) => {
+          const [key, value] = line.split('=');
+          process.env[key] = value;
+        });
+      }
+      console.log('Environment variables:', process.env);
+      const { PLUGIN_API_URL, API_KEY } = process.env;
+
+      if (!PLUGIN_API_URL || !API_KEY) {
+        throw new Error('PLUGIN_API_URL or API_KEY is not set in the environment variables');
+      }
+
       const fullZipPath = path.join(pluginPath, state.zipFilePath);
       const fullJsonPath = path.join(pluginPath, state.jsonFilePath);
       const fullAssetsPath = path.join(pluginPath, state.assetsPath);
@@ -223,285 +224,178 @@ const JSONValidatorUploader = ({ site = {}, context }) => {
 
       // Upload plugin (ZIP, JSON, and author info)
       setState(prevState => ({ ...prevState, uploadStatus: 'Uploading plugin...' }));
+      console.log("key and url", API_KEY, PLUGIN_API_URL);
       const uploadResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN, {
+        userId: state.userId, // Include the new userId field
         pluginName: state.pluginName,
         zipFile: zipFileResult.content,
         jsonFile: jsonFileResult.content,
         metadata: metadata,
         assetsPath: fullAssetsPath,
-        authorData: authorData
+        authorData: authorData,
+        apiKey: API_KEY,
+        apiUrl: PLUGIN_API_URL
       });
 
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || 'Failed to upload plugin');
       }
-  
-	  // Explicitly upload assets
-	  setState(prevState => ({ ...prevState, uploadStatus: 'Uploading assets...' }));
-	  console.log('Attempting to upload assets with:', {
-		pluginName: state.pluginName,
-		assetsPath: fullAssetsPath
-	  });
-	  const assetsResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN_ASSETS, {
-		pluginName: state.pluginName,
-		assetsPath: fullAssetsPath
-	  });
-  
-	  console.log('Assets upload result:', assetsResult);
-  
-	  if (!assetsResult.success) {
-		throw new Error(assetsResult.error || 'Failed to upload assets');
-	  }
-  
-	  // Extract userId from assetsUrl
-	  let userId = '';
-	  if (Array.isArray(assetsResult.assetsUrl) && assetsResult.assetsUrl.length > 0) {
-		const assetUrlParts = assetsResult.assetsUrl[0].split('/');
-		userId = assetUrlParts[3]; // Assuming the userId is always the 4th part of the URL
-		console.log('Extracted userId:', userId);
-	  } else {
-		console.error('assetsResult.assetsUrl is not a valid array:', assetsResult.assetsUrl);
-	  }
-  
-	  const publishedPluginPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}/${state.pluginName}` : '';
-	  const publishedAuthorPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}` : '';
-	  setPluginPageUrl(publishedPluginPageUrl);
-	  setAuthorPageUrl(publishedAuthorPageUrl);
-	  setState(prevState => ({ 
-		...prevState, 
-		uploadStatus: 'Upload successful',
-		zipUrl: uploadResult.zipUrl,
-		metadataUrl: uploadResult.metadataUrl,
-		assetsUrl: assetsResult.assetsUrl,
-	  }));
-	  setUploadProgress(prev => ({ ...prev, step: 5, totalSteps: 5 }));
-  
-	} catch (error) {
-	  console.error('Upload error:', error);
-	  setState(prevState => ({ ...prevState, uploadStatus: `Upload failed: ${error.message}` }));
-	}
-}, [state.isLoggedIn, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, site.path]);
 
-  useEffect(() => {
-	const handleProgressUpdate = (event, progress) => {
-	  setUploadProgress(progress);
-	  setState(prevState => {
-		let newStatus = prevState.uploadStatus;
-		switch(progress.step) {
-		  case 1:
-			newStatus = `Uploading ZIP file... (${progress.chunkNumber}/${progress.totalChunks})`;
-			break;
-		  case 2:
-			newStatus = 'Uploading JSON file...';
-			break;
-		  case 3:
-			newStatus = `Uploading assets... (${progress.chunkNumber}/${progress.totalChunks})`;
-			break;
-		  case 4:
-			newStatus = 'Finalizing upload...';
-			break;
-		  case 5:
-			newStatus = 'Upload complete';
-			break;
-		}
-		return { ...prevState, uploadStatus: newStatus };
-	  });
-	};
-  
-	ipcRenderer.on('upload-progress', handleProgressUpdate);
-  
-	return () => {
-	  ipcRenderer.removeListener('upload-progress', handleProgressUpdate);
-	};
-  }, []);
-  
-  const toggleLoginModal = useCallback(() => {
-    console.log('[RENDERER] Toggling login modal');
-    setState(prevState => ({ 
-      ...prevState,
-      showLoginModal: !prevState.showLoginModal,
-      loginError: '',
-    }));
-  }, []);
+      // Extract userId from assetsUrl
+      let userId = state.userId; // Use the new userId field
+      console.log('Using userId:', userId);
 
-  useEffect(() => {
-    const initializeState = async () => {
-      console.log('[RENDERER] Initializing state...');
-      try {
-        const authStatus = await ipcAsync(IPC_EVENTS.GET_AUTH_STATUS);
-        console.log('[RENDERER] Auth status:', authStatus);
-        setState(prevState => ({ ...prevState, isLoggedIn: authStatus.isLoggedIn }));
-      } catch (error) {
-        console.error('[RENDERER] Error getting auth status:', error);
-      }
-    };
+      const publishedPluginPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}/${state.pluginName}` : '';
+      const publishedAuthorPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}` : '';
+      setPluginPageUrl(publishedPluginPageUrl);
+      setAuthorPageUrl(publishedAuthorPageUrl);
+      setState(prevState => ({ 
+        ...prevState, 
+        uploadStatus: 'Upload successful',
+        zipUrl: uploadResult.zipUrl,
+        metadataUrl: uploadResult.metadataUrl,
+        assetsUrl: uploadResult.assetsUrl,
+      }));
+      setUploadProgress(prev => ({ ...prev, step: 5, totalSteps: 5 }));
 
-    initializeState();
-  }, []);
-
-
+    } catch (error) {
+      console.error('Upload error:', error);
+      setState(prevState => ({ ...prevState, uploadStatus: `Upload failed: ${error.message}` }));
+    }
+  }, [state.userId, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, site.path, apiKey, apiUrl]);
   return (
-		<div style={{ flex: '1', overflowY: 'auto', margin: '10px' }}>
-		<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-			<Title size="xl">Plugin Publisher</Title>
-			{state.isLoggedIn ? (
-			<Button onClick={handleLogout}>Logout</Button>
-			) : (
-			<Button onClick={toggleLoginModal}>Login</Button>
-			)}
-		</div>
-	
-		<FlyModal
-			isOpen={state.showLoginModal}
-			onRequestClose={toggleLoginModal}
-			contentLabel="Login Modal"
-			ariaHideApp={false}
-		>
-			<Title size="l">Login</Title>
-			<div style={{ padding: '20px' }}>
-			<BasicInput
-				label="Email"
-				placeholder="Email"
-				value={email}
-				onChange={(e) => setEmail(e.target.value)}
-				aria-label="Email input"
-			/>
-			<InputPasswordToggle
-				label="Password"
-				placeholder="Password"
-				value={password}
-				onChange={(e) => setPassword(e.target.value)}
-				aria-label="Password input"
-			/>
-			{state.loginError && <Text size="s" style={{ color: 'red' }}>{state.loginError}</Text>}
-			<Button onClick={handleLogin}>Login</Button>
-			</div>
-		</FlyModal>
-		<div style={{ padding: '15px', borderRadius: '5px', marginTop: '20px' }}>
-			<BasicInput
-			label="Plugin Name"
-			placeholder='Plugin Name'
-			value={state.pluginName}
-			onChange={(e) => handleInputChange(e, 'pluginName')}
-			aria-label="Plugin Name input"
-			/>
-			<BasicInput
-			label="Zip File Path"
-			placeholder='Zip File Path'
-			value={state.zipFilePath}
-			onChange={(e) => handleInputChange(e, 'zipFilePath')}
-			aria-label="Zip File Path input"
-			/>
-			<BasicInput
-			label="JSON File Path"
-			value={state.jsonFilePath}
-			placeholder='JSON File Path'
-			onChange={(e) => handleInputChange(e, 'jsonFilePath')}
-			aria-label="JSON File Path input"
-			/>
-			<BasicInput
-			label="Assets Path"
-			value={state.assetsPath}
-			placeholder='Assets Path'
-			onChange={(e) => handleInputChange(e, 'assetsPath')}
-			aria-label="Assets Path input"
-			/>
-			<BasicInput
-			label="Author Info File Path"
-			value={state.authorInfoPath}
-			placeholder='Author Info File Path'
-			onChange={(e) => handleInputChange(e, 'authorInfoPath')}
-			aria-label="Author Info File Path input"
-			/>
-			<div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-			<Button onClick={validateJson}>Validate JSON</Button>
-			{/* {state.isLoggedIn && <Button onClick={handleAuthorInfoUpload}>Upload Author Info</Button>} */}
-			{state.isLoggedIn && state.isJsonValid && <Button onClick={handleUpload}>Upload Plugin</Button>}
-			</div>
-		</div>
-	
-		<Divider marginSize='m'/>
-		
-		<div style={{ padding: '15px', borderRadius: '5px', marginTop: '20px' }}>
-		<Title size="m">Status</Title>
-			<div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '10px', alignItems: 'center' }}>
-				<Text size="s" style={{ fontWeight: 'bold' }}>JSON Valid:</Text>
-				<Text size="s">{state.isJsonValid ? 'Yes' : 'No'}</Text>
-				
-				<Text size="s" style={{ fontWeight: 'bold' }}>Login Status:</Text>
-				<Text size="s">{state.isLoggedIn ? 'Logged In' : 'Not Logged In'}</Text>
-				
-				<Text size="s" style={{ fontWeight: 'bold' }}>Upload Status:</Text>
-				<Text size="s">{state.uploadStatus || 'pending'}</Text>
-				
-				<Text size="s" style={{ fontWeight: 'bold' }}>Upload Progress:</Text>
+    <div style={{ flex: '1', overflowY: 'auto', margin: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <Title size="xl">Plugin Publisher</Title>
+      </div>
 
-				<div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-				<ProgressBar 
-					progress={(uploadProgress.step / uploadProgress.totalSteps) * 100} 
-					showNumber={true}
-				/>
-				<Text size="s">
-					{state.uploadStatus === 'Upload successful' ? 'Complete' : `Step ${uploadProgress.step} of ${uploadProgress.totalSteps}`}
-				</Text>
-				</div>
-				
-				{state.zipUrl && (
-				<>
-					<Text size="s" style={{ fontWeight: 'bold' }}>Zip URL:</Text>
-					<CopyInput
-					value={state.zipUrl}
-					aria-label="Zip URL"
-					style={{ width: '100%' }}
-					/>
-				</>
-				)}
-				
-				{state.metadataUrl && (
-				<>
-					<Text size="s" style={{ fontWeight: 'bold' }}>Metadata URL:</Text>
-					<CopyInput
-					value={state.metadataUrl}
-					aria-label="Metadata URL"
-					style={{ width: '100%' }}
-					/>
-				</>
-				)}
-	
-				{state.assetsUrl && (
-				<>
-					<Text size="s" style={{ fontWeight: 'bold' }}>Assets URL:</Text>
-					<CopyInput
-					value={state.assetsUrl}
-					aria-label="Assets URL"
-					style={{ width: '100%' }}
-					/>
-				</>
-				)}
-				{pluginPageUrl && (
-				<>
-					<Text size="s" style={{ fontWeight: 'bold' }}>Plugin Page URL:</Text>
-					<CopyInput
-					value={pluginPageUrl}
-					aria-label="Plugin Page URL"
-					style={{ width: '100%' }}
-					/>
-				</>
-				)}
-				{authorPageUrl && (
-				<>
-					<Text size="s" style={{ fontWeight: 'bold' }}>Author Page:</Text>
-					<CopyInput
-					value={authorPageUrl}
-					aria-label="Author Page"
-					style={{ width: '100%' }}
-					/>
-				</>
-				)}
-			</div>
-		</div>
-		</div>
-	);
-  };
+      <div style={{ padding: '15px', borderRadius: '5px', marginTop: '20px' }}>
+        <BasicInput
+          label="User ID (Organization)"
+          placeholder='User ID'
+          value={state.userId}
+          onChange={(e) => handleInputChange(e, 'userId')}
+          aria-label="User ID input"
+        />
+        <BasicInput
+          label="Plugin Name"
+          placeholder='Plugin Name'
+          value={state.pluginName}
+          onChange={(e) => handleInputChange(e, 'pluginName')}
+          aria-label="Plugin Name input"
+        />
+        <BasicInput
+          label="Zip File Path"
+          placeholder='Zip File Path'
+          value={state.zipFilePath}
+          onChange={(e) => handleInputChange(e, 'zipFilePath')}
+          aria-label="Zip File Path input"
+        />
+        <BasicInput
+          label="JSON File Path"
+          value={state.jsonFilePath}
+          placeholder='JSON File Path'
+          onChange={(e) => handleInputChange(e, 'jsonFilePath')}
+          aria-label="JSON File Path input"
+        />
+        <BasicInput
+          label="Assets Path"
+          value={state.assetsPath}
+          placeholder='Assets Path'
+          onChange={(e) => handleInputChange(e, 'assetsPath')}
+          aria-label="Assets Path input"
+        />
+        <BasicInput
+          label="Author Info File Path"
+          value={state.authorInfoPath}
+          placeholder='Author Info File Path'
+          onChange={(e) => handleInputChange(e, 'authorInfoPath')}
+          aria-label="Author Info File Path input"
+        />
+        <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+          <Button onClick={validateJson}>Validate JSON</Button>
+          {state.isJsonValid && <Button onClick={handleUpload}>Upload Plugin</Button>}
+        </div>
+      </div>
 
-export default JSONValidatorUploader;
+      <Divider marginSize='m'/>
+      
+      <div style={{ padding: '15px', borderRadius: '5px', marginTop: '20px' }}>
+        <Title size="m">Status</Title>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '10px', alignItems: 'center' }}>
+          <Text size="s" style={{ fontWeight: 'bold' }}>JSON Valid:</Text>
+          <Text size="s">{state.isJsonValid ? 'Yes' : 'No'}</Text>
+          
+          <Text size="s" style={{ fontWeight: 'bold' }}>Upload Status:</Text>
+          <Text size="s">{state.uploadStatus || 'pending'}</Text>
+          
+          <Text size="s" style={{ fontWeight: 'bold' }}>Upload Progress:</Text>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <ProgressBar 
+              progress={(uploadProgress.step / uploadProgress.totalSteps) * 100} 
+              showNumber={true}
+            />
+            <Text size="s">
+              {state.uploadStatus === 'Upload successful' ? 'Complete' : `Step ${uploadProgress.step} of ${uploadProgress.totalSteps}`}
+            </Text>
+          </div>
+          
+          {state.zipUrl && (
+            <>
+              <Text size="s" style={{ fontWeight: 'bold' }}>Zip URL:</Text>
+              <CopyInput
+                value={state.zipUrl}
+                aria-label="Zip URL"
+                style={{ width: '100%' }}
+              />
+            </>
+          )}
+          
+          {state.metadataUrl && (
+            <>
+              <Text size="s" style={{ fontWeight: 'bold' }}>Metadata URL:</Text>
+              <CopyInput
+                value={state.metadataUrl}
+                aria-label="Metadata URL"
+                style={{ width: '100%' }}
+              />
+            </>
+          )}
+
+          {state.assetsUrl && (
+            <>
+              <Text size="s" style={{ fontWeight: 'bold' }}>Assets URL:</Text>
+              <CopyInput
+                value={state.assetsUrl}
+                aria-label="Assets URL"
+                style={{ width: '100%' }}
+              />
+            </>
+          )}
+          {pluginPageUrl && (
+            <>
+              <Text size="s" style={{ fontWeight: 'bold' }}>Plugin Page URL:</Text>
+              <CopyInput
+                value={pluginPageUrl}
+                aria-label="Plugin Page URL"
+                style={{ width: '100%' }}
+              />
+            </>
+          )}
+          {authorPageUrl && (
+            <>
+              <Text size="s" style={{ fontWeight: 'bold' }}>Author Page:</Text>
+              <CopyInput
+                value={authorPageUrl}
+                aria-label="Author Page"
+                style={{ width: '100%' }}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RepoPluginUploader;

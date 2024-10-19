@@ -10,69 +10,16 @@ const CORS_HEADERS = {
 
 // Main worker class
 export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const path = url.pathname;
-
-    // Handle preflight requests
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          ...CORS_HEADERS,
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        },
-      });
-    }
-
-    // Authenticate the request
-    if (!this.authenticateRequest(request, env)) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Route the request
-    switch (request.method) {
-      case 'GET':
-        if (path === '/plugin-data') {
-          return this.handleGetPluginData(request, env);
-        } else if (path === '/author-data') {
-          return this.handleGetAuthorData(request, env);
-        } else if (path === '/authors-list') {
-          return this.handleGetAuthorsList(env);
-        }
-        break;
-      case 'POST':
-        switch (path) {
-          case '/upload-chunk':
-            return this.handleUploadChunk(request, env);
-          case '/upload-json':
-            return this.handleUploadJson(request, env);
-          case '/finalize-upload':
-            return this.handleFinalizeUpload(request, env);
-          case '/update-author-info':
-            return this.handleUpdateAuthorInfo(request, env);
-          case '/upload-asset':
-            return this.handleUploadAsset(request, env);
-          default:
-            break;
-        }
-        break;
-      default:
-        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-          status: 405,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        });
-    }
-
-    return new Response(JSON.stringify({ error: 'Not found' }), {
-      status: 404,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
-  },
+handleOptions(request) {
+	return new Response(null, {
+		status: 204,
+		headers: {
+		...CORS_HEADERS,
+		'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+		'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+		},
+	});
+},
 
   // Authenticate the request using the stored secret
   authenticateRequest(request, env) {
@@ -209,7 +156,7 @@ export default {
   },
 
   // Handle POST /upload-chunk
-  async handleUploadChunk(request, env) {
+  async handlePluginUploadChunk(request, env) {
     try {
       const { userId, pluginName, fileData, chunkNumber, totalChunks } = await request.json();
 
@@ -497,5 +444,63 @@ export default {
     }
 
     return plugins;
+  },
+  async fetch(request, env) {
+	const url = new URL(request.url);
+	const path = url.pathname;
+
+	// Handle preflight requests
+	if (request.method === 'OPTIONS') {
+	  return handleOptions(request);
+	}
+
+	// Authenticate the request
+	if (!this.authenticateRequest(request, env)) {
+	  return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+		status: 401,
+		headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+	  });
+	}
+
+	// Route the request
+	switch (request.method) {
+	  case 'GET':
+		if (path === '/plugin-data') {
+		  return this.handleGetPluginData(request, env);
+		} else if (path === '/author-data') {
+		  return this.handleGetAuthorData(request, env);
+		} else if (path === '/authors-list') {
+		  return this.handleGetAuthorsList(env);
+		}
+		break;
+	  case 'POST':
+		switch (path) {
+		  case '/upload-plugin':
+			return this.handlePluginUpload(request, env);
+		  case '/plugin-upload-chunk':
+			return this.handlePluginUploadChunk(request, env);
+		  case '/plugin-upload-json':
+			return this.handleUploadJson(request, env);
+		  case '/plugin-upload-assets':
+			return this.handleUploadAsset(request, env);
+		  case '/plugin-upload-complete':
+			return this.handleFinalizeUpload(request, env);
+		  case '/update-author-info':
+			return this.handleUpdateAuthorInfo(request, env);
+		  default:
+			break;
+		}
+		break;
+	  default:
+		return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+		  status: 405,
+		  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+		});
+	}
+
+	return new Response(JSON.stringify({ error: 'Not found' }), {
+	  status: 404,
+	  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+	});
   },
 };
