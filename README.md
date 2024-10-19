@@ -1,137 +1,103 @@
-# XR Publisher Plugin Publisher
+# Micro Plugin Publisher
 
-This Local WP add-on enables developers to publish and update 3D plugins for WordPress that extend the "XR Publisher" plugin. It integrates with the app.xr.foundation platform for seamless plugin distribution and updates.
+Micro Plugin Publisher is a Local WP add-on that streamlines the process of publishing and updating WordPress plugins. It provides a user-friendly interface within Local WP and includes API tooling for self-hosted plugin distribution.
 
-## What This Tool Does
+![Micro Plugin Publisher Preview](docs/assets/micro-plugin-publisher-preview.jpg)
 
-The XR Publisher Plugin Updater simplifies the process of deploying and maintaining WordPress plugins specifically designed for XR (Extended Reality) applications. It provides a user-friendly interface within Local WP to:
+## Features
 
-1. Validate your plugin's metadata
-2. Upload your plugin files to the SXP Digital platform's 3D plugin repo
-3. Generate distribution URLs for your plugin
-4. Enable automatic updates for end-users
-
-This tool bridges the gap between local development and cloud distribution, ensuring that your XR plugins can be easily shared and kept up-to-date.
-
-![XR Publisher Preview](docs/assets/xr-publisher-preview.jpg)
+- Validate plugin metadata
+- Upload plugin files to your own storage solution
+- Generate distribution URLs for your plugins
+- Enable automatic updates for end-users
+- Self-hosted API for plugin distribution
 
 ## Installation
 
-To install the XR Publisher Plugin Updater add-on:
-
-1. Clone this repository directly into your Local WP add-ons directory:
-   - macOS: `~/Library/Application Support/Local/addons`
-   - Windows: `C:\Users\username\AppData\Roaming\Local\addons`
-   - Linux: `~/.config/Local/addons`
-
-2. Navigate to the cloned directory and install dependencies:
+1. Clone this repository into your Local WP add-ons directory:
    ```
-   cd path/to/xr-publisher-plugin-updater
+   git clone https://github.com/yourusername/micro-plugin-publisher.git
+   ```
+
+2. Install dependencies:
+   ```
+   cd micro-plugin-publisher
    yarn install
-   ```
-   or if you prefer npm:
-   ```
-   npm install
    ```
 
 3. Build the add-on:
    ```
    yarn build
    ```
-   or with npm:
-   ```
-   npm run build
-   ```
 
-4. Restart Local WP.
+4. Restart Local WP and enable the Micro Plugin Publisher add-on in preferences.
 
-5. Enable the XR Publisher Plugin Updater add-on in Local's preferences.
+## Usage
 
-If enabling the add-on via the Local UI doesn't work, you can manually enable it by updating the `enabled-addons.json` file. This file is located at:
+1. Fill in the plugin details in the add-on interface:
+   - Plugin Name
+   - Zip File Path
+   - JSON File Path
+   - Assets Path
 
-- macOS: `~/Library/Application Support/Local/enabled-addons.json`
-- Windows: `C:\Users\<username>\AppData\Roaming\Local\addons\enabled-addons.json`
-- Linux: `~/.config/Local/enabled-addons.json`
+2. Click "Validate JSON" to verify your metadata.
+3. If validation succeeds, click "Upload Plugin" to publish.
+4. You'll receive URLs for your uploaded zip file, metadata, and plugin page.
 
-Make sure the json file includes:
+## API Setup
 
-```json
-"xr-publisher-plugin-updater": true
-```
+To set up your own plugin distribution API:
 
-After making these changes, restart Local WP again to ensure the add-on is properly loaded.
-
-## How to Use
-
-### Input Fields
-
-1. Plugin Name: 
-   - Enter the name of your plugin's directory in the WordPress plugins folder.
-   - Example: For a plugin located at `wp-content/plugins/my-xr-plugin`, enter `my-xr-plugin`.
-
-2. Zip File Path: 
-   - Provide the relative path to your plugin's zip file within the plugin directory.
-   - Example: If the zip is at `my-xr-plugin/dist/my-xr-plugin.zip`, enter `dist/my-xr-plugin.zip`.
-
-3. JSON File Path: 
-   - Specify the relative path to your plugin's metadata JSON file.
-   - Example: For a file at `my-xr-plugin/dist/metadata.json`, enter `dist/metadata.json`.
-
-4. Assets path
-   - Specify the relative path to your plugin's image asset files.
-   - Example: For a file at `my-xr-plugin/dist/assets`, enter `dist/assests`.
-
-
-### Custom Paths
-
-While the add-on provides default paths, you can override these to accommodate custom build structures:
-
-- Default Zip Path: `plugin-build/zip/[Plugin Name].zip`
-- Default JSON Path: `plugin-build/json/[Plugin Name].json`
-
-To use custom paths, simply enter your preferred paths in the respective input fields.
-
-### Publishing Process
-
-1. Fill in the input fields with your plugin details.
-2. Click the Login buton and sign in using your credentials. If you do not have an account create one here: https://app.xr.foundation/register (DM for invite code)
-2. Click "Validate JSON" to verify your metadata file.
-3. If validation succeeds, the "Upload Plugin" button will appear.
-4. Click "Upload Plugin" to initiate the publishing process.
-5. Upon completion, you'll receive URLs for your uploaded zip file, metadata, and plugin page.
-
-Once uploaded the add-on will provide you with a metadata url and your plugin page url. A plugin page is acessible from the following route:
-`https://app.xr.foundation/plugins/<your-user-id>/<your-plugin-slug>`
-
-Example live plugin page: https://app.xr.foundation/plugins/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/xr-publisher
-
-### Video Demo
-
-[![Video demo](https://img.youtube.com/vi/1oTkmDNkwyo/0.jpg)](https://www.youtube.com/watch?v=1oTkmDNkwyo)
-
-### Coming soon: Author pages that list all your plugins a la Bandcamp. I want releasing plugins to feel like music drops.
+1. Navigate to the `api` directory.
+2. Follow the instructions in `API_SETUP.md` to deploy the worker and R2 bucket using Cloudflare.
 
 ## Enabling Automatic Updates
 
-To allow users to update your plugin directly from their WordPress dashboard:
+To enable automatic updates for your plugin, you need to implement the update mechanism in your plugin's PHP code. Here's how to do it:
 
-1. Include the `XR_Publisher_Updater` class in your plugin's main file.
-2. Initialize the updater with your plugin's information:
+1. Include the `Micro_Plugin_Publisher_Updater` class in your plugin:
 
-Example:
+   ```php
+   require_once plugin_dir_path(__FILE__) . 'Micro_Plugin_Publisher_Updater.php';
+   ```
 
-```
-require_once plugin_dir_path(__FILE__) . 'XR_Publisher_Updater.php';
+2. Initialize the updater in your plugin's main file:
 
-$updater = new xrPublisher\XR_Publisher_Updater(
-    'your-plugin-slug',
-    plugin_basename(__FILE__),
-    '1.0.0', // Your plugin's current version
-    'https://example.com/your-plugin-metadata.json', // Metadata URL from the add-on
-    'https://example.com/your-plugin.zip' // Zip URL from the add-on
-);
-```
+   ```php
+   function initialize_plugin_updater() {
+       $plugin_slug = 'your-plugin-slug';
+       $plugin_name = plugin_basename(__FILE__);
+       $version = 'YOUR_PLUGIN_VERSION';
+       $metadata_url = 'https://your-api.com/plugin-metadata.json';
+       $zip_url = 'https://your-api.com/plugin-download.zip';
+       new \xrPublisher\Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $metadata_url, $zip_url);
+   }
+   add_action('init', 'initialize_plugin_updater');
+   ```
 
-Replace the placeholder values with your actual plugin information and the URLs provided by the Plugin Publisher add-on after uploading.
+3. Make sure to replace the placeholder values with your actual plugin information and URLs provided by the Micro Plugin Publisher add-on after uploading.
 
-For developers looking to contribute or customize the add-on, please refer to the DEVELOPMENT.md file in the repository.
+The `Micro_Plugin_Publisher_Updater` class handles the communication with WordPress to check for updates and provide update information. It compares the current plugin version with the version available on your server and facilitates the update process when a new version is available.
+
+## Customization
+
+- Modify the add-on's UI in `src/renderer/index.jsx`
+- Adjust the main process logic in `src/main/index.js`
+- Customize API functionality in `api/src/index.js`
+- Adapt the `Micro_Plugin_Publisher_Updater` class to fit your specific needs
+
+## Contributing
+
+Contributions are welcome! Please submit issues and pull requests on the GitHub repository.
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+## Support
+
+For issues or assistance:
+
+1. Check the Troubleshooting section in API_SETUP.md
+2. Open an issue on the GitHub repository
+3. Consult the Local WP documentation for add-on related queries

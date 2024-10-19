@@ -297,8 +297,8 @@ handleOptions(request) {
         },
       });
 
-      const zipUrl = `${env.PLUGIN_BUCKET_URL}/${objectKey}`;
-      const metadataUrl = `${env.PLUGIN_BUCKET_URL}/${metadataKey}`;
+      const zipUrl = `${objectKey}`;
+      const metadataUrl = `${metadataKey}`;
 
       return new Response(JSON.stringify({ 
         success: true,
@@ -375,12 +375,12 @@ handleOptions(request) {
 
       console.log(`Successfully stored ${assetType}`);
 
-      const assetUrl = `${env.PLUGIN_BUCKET_URL}/${assetKey}`;
+      const assetUrl = `${assetKey}`;
 
       return new Response(JSON.stringify({ 
         success: true, 
         message: `${assetType} uploaded successfully`,
-        assetUrl 
+        assetUrl
       }), {
         status: 200,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },

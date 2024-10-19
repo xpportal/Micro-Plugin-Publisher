@@ -8,14 +8,14 @@
  */
 
 //  usage:
-//  function initialize_xr_publisher_updater() {
+//  function initialize_Micro_Plugin_Publisher_Updater() {
 //     $plugin_slug = 'xr-publisher';
 //     $plugin_name = plugin_basename(__FILE__);
 //     $version = XR_PUBLISHER_PLUGIN_VERSION;
 //     $update_url = ''; // Use your Plugin Publisher Metadata URL: https://plugins.sxp.digital/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/xr-publisher/xr-publisher.json
-//     new XR_Publisher_Updater($plugin_slug, $plugin_name, $version, $update_url);
+//     new Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $update_url);
 // }
-// add_action('init', 'xrPublisher\initialize_xr_publisher_updater');
+// add_action('init', 'xrPublisher\initialize_Micro_Plugin_Publisher_Updater');
 
 
 namespace xrPublisher;
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
 }
 
-class XR_Publisher_Updater {
+class Micro_Plugin_Publisher_Updater {
     private $plugin_slug;
     private $plugin_name;
     private $version;

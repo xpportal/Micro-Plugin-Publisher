@@ -25,7 +25,7 @@ export default function (context: LocalMain.AddonMainContext): void {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${data.apiKey}`,
     };
-  
+ 
     try {
       let response;
       switch (method.toUpperCase()) {
@@ -142,7 +142,52 @@ addIpcAsyncListener(IPC_EVENTS.READ_JSON_FILE, async ({ jsonPath }) => {
 	}
 });
 
-
+addIpcAsyncListener(IPC_EVENTS.UPDATE_JSON_FILE, async ({ pluginName, jsonFilePath, userId, BUCKET_URL }) => {
+	try {
+	  const sitePath = formatHomePath('~/Local Sites');
+	  const fullJsonPath = path.join(sitePath, pluginName, 'app', 'public', 'wp-content', 'plugins', pluginName, jsonFilePath);
+	  
+	  logger.info(`Updating JSON file at: ${fullJsonPath}`);
+  
+	  // Read the current JSON file
+	  const currentJsonContent = await fs.readFile(fullJsonPath, 'utf8');
+	  let jsonData = JSON.parse(currentJsonContent);
+  
+	  if (!Array.isArray(jsonData) || jsonData.length === 0) {
+		throw new Error('Invalid JSON structure: expected a non-empty array');
+	  }
+  
+	  // Update only the necessary fields in the first object of the array
+	  jsonData[0] = {
+		...jsonData[0],
+		download_link: `${BUCKET_URL}/${userId}/${pluginName}/${pluginName}.zip`,
+		banner: `${BUCKET_URL}/${userId}/${pluginName}/banner-1500x620.jpg`,
+		icons: {
+		  "1x": `${BUCKET_URL}/${userId}/${pluginName}/icon-256x256.jpg`,
+		  "2x": `${BUCKET_URL}/${userId}/${pluginName}/icon-256x256.jpg`
+		},
+		author_profile: `https://app.xr.foundation/plugins/${userId}`,
+		contributors: {
+		  [jsonData[0].author]: {
+			profile: `https://app.xr.foundation/plugins/${userId}`,
+			avatar: jsonData[0].contributors?.[jsonData[0].author]?.avatar || '',
+			display_name: jsonData[0].author
+		  }
+		},
+		last_updated: new Date().toISOString(),
+		added: jsonData[0].added || new Date().toISOString().split('T')[0]
+	  };
+  
+	  // Write the updated JSON data back to the file
+	  await fs.writeJson(fullJsonPath, jsonData, { spaces: 2 });
+	  logger.info('JSON file updated successfully');
+	  return { success: true, updatedData: jsonData[0] };
+	} catch (error) {
+	  logger.error(`Error updating JSON file: ${error}`);
+	  return { success: false, error: error instanceof Error ? error.message : String(error) };
+	}
+  });
+	
 addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFile, jsonFile, metadata, assetsPath, authorData, apiKey, apiUrl }) => {
     try {
       // Step 1: Upload ZIP file in chunks
@@ -177,7 +222,7 @@ addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFi
           totalChunks,
         });
       }
-
+	  logger.info(`Json file: ${jsonFile}`);
       // Step 2: Upload JSON file
       const jsonResponse = await makeApiCall(`${apiUrl}/plugin-upload-json`, 'POST', {
         userId,
@@ -217,7 +262,7 @@ addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFi
       // Step 4: Upload assets
       const assetFiles = ['banner-1500x620.jpg', 'icon-256x256.jpg'];
       const uploadedAssets = [];
-
+	  logger.info(`Assets path: ${assetsPath}`);
       for (let i = 0; i < assetFiles.length; i++) {
         const assetFile = assetFiles[i];
         const filePath = path.join(assetsPath, assetFile);
