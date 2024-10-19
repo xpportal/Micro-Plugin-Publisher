@@ -16,7 +16,7 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
 
 1. Clone this repository into your Local WP add-ons directory:
    ```
-   git clone https://github.com/yourusername/micro-plugin-publisher.git
+   git clone git@github.com:xpportal/Micro-Plugin-Publisher.git
    ```
    ### Clone
 
