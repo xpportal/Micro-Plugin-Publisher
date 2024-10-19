@@ -18,6 +18,13 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
    ```
    git clone https://github.com/yourusername/micro-plugin-publisher.git
    ```
+   ### Clone
+
+	- macOS: ~/Library/Application Support/Local/addons
+	- Windows: C:\Users\username\AppData\Roaming\Local\addons
+	- Debian Linux: ~/.config/Local/addons
+
+	*You can replace 'Local' with 'Local Beta' if you want to create the add-on for Local Beta.*
 
 2. Install dependencies:
    ```
@@ -40,9 +47,29 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
    - JSON File Path
    - Assets Path
 
-2. Click "Validate JSON" to verify your metadata.
-3. If validation succeeds, click "Upload Plugin" to publish.
-4. You'll receive URLs for your uploaded zip file, metadata, and plugin page.
+### File Access
+
+The addon looks for your files in the Local by Flywheel site structure:
+
+~/Local Sites/[Plugin Name]/app/public/wp-content/plugins/[Plugin Name]/
+
+### Publishing Process
+
+1. Info is entered into the input fields.
+2. "Update Json" updates the json file with the anticipated file paths.
+3. Validation is clicked to reveal the upload button. 
+	If validation is successful, click "Upload Plugin" to start the publishing process.
+4. The addon will provide you with URLs for the uploaded zip file and metadata.
+
+### External Libraries
+
+- @getflywheel/local provides type definitions for Local's Add-on API.
+- @getflywheel/local-components provides reusable React components for your Local add-on.
+
+### Development Workflow
+
+Consult the [Local add-on API](https://getflywheel.github.io/local-addon-api) for a wide range of values and functions for developing your add-on.
+
 
 ## API Setup
 
@@ -101,3 +128,7 @@ For issues or assistance:
 1. Check the Troubleshooting section in API_SETUP.md
 2. Open an issue on the GitHub repository
 3. Consult the Local WP documentation for add-on related queries
+
+## License
+
+MIT
