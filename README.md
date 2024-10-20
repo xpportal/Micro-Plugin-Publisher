@@ -124,9 +124,9 @@ The addon uses environment variables for API configuration. Ensure you have a `.
 
 ## Customization
 
-- Modify the add-on's UI in `src/renderer/index.jsx`
-- Adjust the main process logic in `src/main/index.js`
-- Customize API functionality in `api/src/index.js`
+- Modify the add-on's UI in `src/JSONValidatorUploader.jsx`
+- Adjust the main process logic in `src/main.ts`
+- Customize API functionality in `api/src/worker.js`
 - Adapt the `Micro_Plugin_Publisher_Updater` class to fit your specific needs
 
 ## Contributing
