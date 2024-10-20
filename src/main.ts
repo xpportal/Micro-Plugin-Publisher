@@ -6,7 +6,7 @@ import axios from 'axios';
 import { IPC_EVENTS } from './constants';
 import * as Electron from 'electron';
 
-const { localLogger } = LocalMain.getServiceContainer().cradle;
+const { wpCli, localLogger, siteData } = LocalMain.getServiceContainer().cradle;
 
 const logger = localLogger.child({
   thread: "main",
@@ -14,8 +14,12 @@ const logger = localLogger.child({
 });
 
 export default function (context: LocalMain.AddonMainContext): void {
-  const { electron } = context;
-  const { ipcMain } = electron;
+	const logger = localLogger.child({
+	  thread: "main",
+	  addon: "repo-plugin-uploader",
+	});
+	const { electron } = context;
+	const { ipcMain } = electron;
 
   logger.info('Starting initialization of Repo Plugin Uploader addon');
 
@@ -187,8 +191,206 @@ addIpcAsyncListener(IPC_EVENTS.UPDATE_JSON_FILE, async ({ pluginName, jsonFilePa
 	  return { success: false, error: error instanceof Error ? error.message : String(error) };
 	}
   });
-	
-addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFile, jsonFile, metadata, assetsPath, authorData, apiKey, apiUrl }) => {
+
+  addIpcAsyncListener(IPC_EVENTS.SCAFFOLD_PLUGIN, async ({
+	pluginName,
+	pluginSlug,
+	pluginDescription,
+	pluginVersion,
+	pluginUri,
+	requiresWp,
+	requiresPhp,
+	authorName,
+	authorUri,
+	license,
+	licenseUri,
+	textDomain,
+	domainPath,
+  }) => {
+	try {
+	  const site = await siteData.getSiteByProperty('name', pluginName);
+  
+	  if (!site) {
+		throw new Error(`Site with name ${pluginName} not found`);
+	  }
+  
+	  // Use WP-CLI to scaffold the plugin with supported parameters
+	  const scaffoldCommand = [
+		'scaffold',
+		'plugin',
+		pluginSlug,
+		`--plugin_name=${pluginName}`,
+		`--plugin_description=${pluginDescription}`,
+		`--plugin_author=${authorName}`,
+		`--plugin_author_uri=${authorUri}`,
+		`--plugin_uri=${pluginUri}`,
+		'--activate'
+	  ];
+  
+	  const scaffoldResult = await wpCli.run(site, scaffoldCommand);
+	  logger.info('Scaffold result:', scaffoldResult);
+  
+	  // Define paths
+	  const pluginDir = path.join(site.paths.webRoot, 'wp-content', 'plugins', pluginSlug);
+	  const mainPluginFile = path.join(pluginDir, `${pluginSlug}.php`);
+	  const readmeFile = path.join(pluginDir, 'readme.txt');
+  
+	  // Copy the upgrader file
+	  const upgraderSourcePath = path.join(__dirname, '..', 'examples', 'class-example-upgrader.php');
+	  const upgraderDestPath = path.join(pluginDir, 'class-example-upgrader.php');
+	  await fs.copy(upgraderSourcePath, upgraderDestPath);
+
+	  	  // Copy the package.js file from the add-on's examples folder to the plugin directory
+	const packageJsSourcePath = path.join(__dirname, '..', 'examples', 'package.js');
+	const packageJsDestPath = path.join(pluginDir, 'package.js');
+	await fs.copy(packageJsSourcePath, packageJsDestPath);
+
+	// Update or create package.json
+	const packageJsonPath = path.join(pluginDir, 'package.json');
+	let packageJson: any = {};
+	if (await fs.exists(packageJsonPath)) {
+		packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+	}
+
+	packageJson = {
+		...packageJson,
+		scripts: {
+			...(packageJson.scripts || {}),
+			build: "node package.js"
+		},
+		dependencies: {
+			...(packageJson.dependencies || {}),
+			"fs-extra": "^10.1.0",
+			"adm-zip": "^0.5.9"
+		}
+	};
+
+	await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+
+  
+	  // Create plugin-build directory and subdirectories
+	  const pluginBuildDir = path.join(pluginDir, 'plugin-build');
+	  await fs.ensureDir(pluginBuildDir);
+	  await fs.ensureDir(path.join(pluginBuildDir, 'json'));
+	  await fs.ensureDir(path.join(pluginBuildDir, 'zip'));
+	  await fs.ensureDir(path.join(pluginBuildDir, 'assets'));
+  
+	  // Create empty .env file
+	  await fs.writeFile(path.join(pluginDir, '.env'), '');
+  
+	  // Read the generated main plugin file
+	  let mainPluginContent = await fs.readFile(mainPluginFile, 'utf8');
+
+	  // check if there is a .gitignore file if there is, add the plugin-build dir and the .env file to the end
+	  const gitIgnoreFile = path.join(pluginDir, '.gitignore');
+	  if (await fs.exists(gitIgnoreFile)) {
+		let gitIgnoreContent = await fs.readFile(gitIgnoreFile, 'utf8');
+		gitIgnoreContent += `\nplugin-build/\n.env\n`;
+		await fs.writeFile(gitIgnoreFile, gitIgnoreContent);
+	  }
+
+	  // check for a .distignore file if there is, add the plugin-build dir and the .env file to the end
+	  const distIgnoreFile = path.join(pluginDir, '.distignore');
+	  if (await fs.exists(distIgnoreFile)) {
+		let distIgnoreContent = await fs.readFile
+		(distIgnoreFile, 'utf8');
+		distIgnoreContent += `plugin-build\n.env\npackage.js\n`;
+		await fs.writeFile(distIgnoreFile, distIgnoreContent);
+	  }
+
+	  // clear the file
+	  await fs.writeFile(mainPluginFile, '');
+  
+	  // Update the plugin header with additional information
+	  const pluginHeader = `<?php
+  /**
+   * Plugin Name: ${pluginName}
+   * Plugin URI: ${pluginUri}
+   * Description: ${pluginDescription}
+   * Version: ${pluginVersion}
+   * Requires at least: ${requiresWp}
+   * Requires PHP: ${requiresPhp}
+   * Author: ${authorName}
+   * Author URI: ${authorUri}
+   * License: ${license}
+   * License URI: ${licenseUri}
+   * Text Domain: ${textDomain}
+   * Domain Path: ${domainPath}
+   */
+  `;
+  
+	  mainPluginContent = pluginHeader;
+  
+	  // Append the upgrader class inclusion and initialization code
+	  const updaterCode = `
+  // Include the Upgrader class
+  require_once plugin_dir_path(__FILE__) . 'class-example-upgrader.php';
+  
+  function initialize_Micro_Plugin_Publisher_Updater() {
+	  $plugin_slug = '${pluginSlug}';
+	  $plugin_name = plugin_basename(__FILE__);
+	  $version = '${pluginVersion}';
+	  $metadata_url = 'https://plugins.sxp.digital/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/${pluginSlug}/${pluginSlug}.json';
+	  $zip_url = 'https://plugins.sxp.digital/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/${pluginSlug}/${pluginSlug}.zip';
+	  new microUpgrader\\Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $metadata_url, $zip_url);
+  }
+  add_action('init', 'initialize_Micro_Plugin_Publisher_Updater');
+  `;
+  
+	  mainPluginContent += updaterCode;
+  
+	  // Write the updated main plugin file
+	  await fs.writeFile(mainPluginFile, mainPluginContent);
+  
+	  // Update readme.txt
+	  let readmeContent = await fs.readFile(readmeFile, 'utf8');
+	  readmeContent = readmeContent.replace(
+		/=== .+ ===\n/,
+		`=== ${pluginName} ===\n`
+	  );
+	  readmeContent = readmeContent.replace(
+		/Contributors: .+\n/,
+		`Contributors: ${authorName.toLowerCase().replace(/\s+/g, '')}\n`
+	  );
+	  readmeContent = readmeContent.replace(
+		/Requires at least: .+\n/,
+		`Requires at least: ${requiresWp}\n`
+	  );
+	  readmeContent = readmeContent.replace(
+		/Requires PHP: .+\n/,
+		`Requires PHP: ${requiresPhp}\n`
+	  );
+	  readmeContent = readmeContent.replace(
+		/License: .+\n/,
+		`License: ${license}\n`
+	  );
+	  readmeContent = readmeContent.replace(
+		/License URI: .+\n/,
+		`License URI: ${licenseUri}\n`
+	  );
+	  await fs.writeFile(readmeFile, readmeContent);
+  
+	  return { 
+		success: true, 
+		message: 'Plugin scaffolded successfully with additional setup',
+		mainPluginContent,
+		readmeContent
+	  };
+	} catch (error) {
+	  logger.error('Error scaffolding plugin:', error);
+	  // if error contains the string "Command failed" then the error is from the wp-cli command, let the user know it is likely that they dont have their environment turned on
+		if (error.message.includes('Command failed')) {
+			return {
+			success: false,
+			error: 'Failed to scaffold plugin. Make sure your Local environment is running.',
+			};
+		} else {
+			return { success: false, error: error.message };
+		}
+	}
+  });
+  
+  addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFile, jsonFile, metadata, assetsPath, authorData, apiKey, apiUrl }) => {
     try {
       // Step 1: Upload ZIP file in chunks
       const CHUNK_SIZE = 1024 * 1024; // 1MB chunks

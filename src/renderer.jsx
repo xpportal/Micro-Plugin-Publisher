@@ -3,7 +3,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import * as LocalRenderer from '@getflywheel/local/renderer';
 import { IPC_EVENTS } from './constants';
-import JSONValidatorUploader from './JSONValidatorUploader';
+import RepoPluginUploader from './JSONValidatorUploader';
 
 const stylesheetPath = path.resolve(__dirname, '../style.css');
 
@@ -31,7 +31,7 @@ export default async function (context) {
         path: `/${addonID}`,
         render: ({ match }) => {
           console.log('[RENDERER] Rendering JSONValidatorUploader component');
-          return <JSONValidatorUploader site={match.params.siteID ? context.sites[match.params.siteID] : {}} />;
+          return <RepoPluginUploader site={match.params.siteID ? context.sites[match.params.siteID] : {}} />;
         },
       },
     ];

@@ -4,21 +4,21 @@
  *
  * BRUTE FOCED WORK IN PROGRESS
  * This is a brute force example of how to implement a custom plugin updater for XR Publisher.
- * @package xrPublisher
+ * @package microUpgrader
  */
 
 //  usage:
 //  function initialize_Micro_Plugin_Publisher_Updater() {
 //     $plugin_slug = 'xr-publisher';
 //     $plugin_name = plugin_basename(__FILE__);
-//     $version = XR_PUBLISHER_PLUGIN_VERSION;
+//     $version = '1.0.0';
 //     $update_url = ''; // Use your Plugin Publisher Metadata URL: https://plugins.sxp.digital/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/xr-publisher/xr-publisher.json
 //     new Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $update_url);
 // }
-// add_action('init', 'xrPublisher\initialize_Micro_Plugin_Publisher_Updater');
+// add_action('init', 'microUpgrader\initialize_Micro_Plugin_Publisher_Updater');
 
 
-namespace xrPublisher;
+namespace MicroUpgrader;
 
 if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
@@ -49,11 +49,14 @@ class Micro_Plugin_Publisher_Updater {
 
         $remote_info = $this->get_remote_info();
 
+		// only use the 0 object in remote info
+		$remote_info = $remote_info->{"0"};
+
         if (is_wp_error($remote_info)) {
             return $transient;
         }
 
-        if (version_compare($this->version, $remote_info->version, '<')) {
+        if (version_compare((string)$this->version, (string)$remote_info->version, '<')) {
             $obj = new \stdClass();
             $obj->slug = $this->plugin_slug;
             $obj->new_version = $remote_info->version;
@@ -84,6 +87,8 @@ class Micro_Plugin_Publisher_Updater {
         }
 
         $remote_info = $this->get_remote_info();
+
+		$remote_info = $remote_info->{"0"};
 
         if (is_wp_error($remote_info)) {
             return $false;

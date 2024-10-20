@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import * as Local from '@getflywheel/local';
 import { ipcAsync } from '@getflywheel/local/renderer';
-import { Button, Title, Text, BasicInput, Divider, CopyInput, ProgressBar } from '@getflywheel/local-components';
+import { Button, Title, Text, BasicInput, Divider, CopyInput, ProgressBar, FlyModal, FlyTooltip } from '@getflywheel/local-components';
 import { IPC_EVENTS } from './constants';
 import path from 'path';
 import fs from 'fs-extra';
+import ScaffoldModal from './ScaffoldModal';
+
 
 const { ipcRenderer } = window.require('electron');
 
@@ -18,8 +20,54 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 	const [bucketUrl, setBucketUrl] = useState('');
 	const [jsonUpdateStatus, setJsonUpdateStatus] = useState('');
 
+	const [showScaffoldModal, setShowScaffoldModal] = useState(false);
+	console.log("this is the site object", site);
+	const [scaffoldData, setScaffoldData] = useState({
+	  pluginName: '',
+	  pluginDescription: '',
+	  authorName: '',
+	  authorSite: '',
+	  site: site,
+	});
+	const [scaffoldError, setScaffoldError] = useState('');
+  
+	const toggleScaffoldModal = useCallback(() => {
+	  setShowScaffoldModal(prevState => !prevState);
+	  setScaffoldError('');
+	}, []);
+  
+	const handleScaffoldInputChange = useCallback((e, key) => {
+		const value = e.target.value;
+		setScaffoldData(prevState => ({
+			...prevState,
+			[key]: value,
+		}));
+	}, []);
+
+	const handleScaffoldSuccess = (scaffoldData) => {
+		console.log('Plugin scaffolded successfully:', scaffoldData);
+		// You can add any additional logic here, such as refreshing the plugin list
+	  };
+	  
+	  
+	const handleScaffoldPlugin = useCallback(async () => {
+		try {
+			const result = await ipcAsync(IPC_EVENTS.SCAFFOLD_PLUGIN, scaffoldData);
+			if (result.success) {
+			console.log('Plugin scaffolded successfully');
+			setShowScaffoldModal(false);
+			// Update state or show success message
+			} else {
+			setScaffoldError(result.error || 'Failed to scaffold plugin');
+			}
+		} catch (error) {
+			console.error('Error scaffolding plugin:', error);
+			setScaffoldError('An error occurred while scaffolding the plugin');
+		}
+	}, [scaffoldData]);
+	
 	const getDefaultPaths = useCallback((siteName) => {
-		console.log('siteName:', siteName);
+		console.log('siteName:', siteName, 'site:', site);
 		const pluginName = siteName || 'xr-chess-block';
 		return {
 		pluginName,
@@ -37,6 +85,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 		siteId: site.id || '',
 		sitePath: site.path || '',
 		userId: '', // New field for userId/organization
+		subDirectory: '',
 		pluginName: defaults.pluginName,
 		zipFilePath: defaults.zipPath,
 		jsonFilePath: defaults.jsonPath,
@@ -132,7 +181,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 				const result = await ipcAsync(IPC_EVENTS.UPDATE_JSON_FILE, {
 					pluginName: state.pluginName,
 					jsonFilePath: state.jsonFilePath,
-					userId: state.userId,
+					userId: state.subDirectory,
 					BUCKET_URL: process.env.BUCKET_URL
 				});
 			
@@ -294,7 +343,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 
 		// Convert authorData to a JSON string before sending
 		const uploadResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN, {
-			userId: state.userId,
+			userId: state.subDirectory,
 			pluginName: state.pluginName,
 			zipFile: zipFileResult.content,
 			jsonFile: jsonFileResult.content,
@@ -311,7 +360,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 		}
 
 		// Extract userId from assetsUrl
-		let userId = state.userId; // Use the new userId field
+		let userId = state.subDirectory; // Use the new userId field
 		console.log('Using userId:', userId);
 
 		//   const publishedPluginPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}/${state.pluginName}` : '';
@@ -331,122 +380,132 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 			console.error('Upload error:', error);
 			setState(prevState => ({ ...prevState, uploadStatus: `Upload failed: ${error.message}` }));
 		}
-	}, [state.userId, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, site.path, apiKey, apiUrl, bucketUrl]);
+	}, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, site.path, apiKey, apiUrl, bucketUrl]);
 
 	return (
-		<div style={{ flex: '1', overflowY: 'auto', margin: '10px' }}>
-		<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+		<div style={{ flex: '1', overflowY: 'auto', padding: '20px', maxWidth: '900px', margin: '0 auto' }}>
+		  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
 			<Title size="xl">Plugin Publisher</Title>
-		</div>
-
-		<div style={{ padding: '15px', borderRadius: '5px', marginTop: '20px' }}>
+			<Button onClick={toggleScaffoldModal}>Scaffold Plugin</Button>
+		  </div>
+	
+		  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
 			<BasicInput
-			label="User ID (Organization)"
-			placeholder='User ID'
-			value={state.userId}
-			onChange={(e) => handleInputChange(e, 'userId')}
-			aria-label="User ID input"
+			  label='Sub Directory'
+			  helpText="Subdirectory for plugin upload (e.g., api/your-org/ or api/plugins/)"
+			  placeholder='e.g., plugins, themes, some-org'
+			  value={state.subDirectory}
+			  onChange={(e) => handleInputChange(e, 'subDirectory')}
 			/>
 			<BasicInput
-			label="Plugin Name"
-			placeholder='Plugin Name'
-			value={state.pluginName}
-			onChange={(e) => handleInputChange(e, 'pluginName')}
-			aria-label="Plugin Name input"
+			  label="Plugin Name"
+			  helpText="Match WordPress plugins directory folder name you wish to publish"
+			  placeholder='e.g., my-awesome-plugin'
+			  value={state.pluginName}
+			  style={{ paddingBottom: '5.5px', marginBottom: '5.5px' }}
+			  onChange={(e) => handleInputChange(e, 'pluginName')}
 			/>
 			<BasicInput
-			label="Zip File Path"
-			placeholder='Zip File Path'
-			value={state.zipFilePath}
-			onChange={(e) => handleInputChange(e, 'zipFilePath')}
-			aria-label="Zip File Path input"
+			  label="Zip File Path"
+			  helpText="Suggested in plugin-build/zip directory"
+			  placeholder='e.g., plugin-build/zip/my-plugin.zip'
+			  value={state.zipFilePath}
+			  onChange={(e) => handleInputChange(e, 'zipFilePath')}
 			/>
 			<BasicInput
-			label="JSON File Path"
-			value={state.jsonFilePath}
-			placeholder='JSON File Path'
-			onChange={(e) => handleInputChange(e, 'jsonFilePath')}
-			aria-label="JSON File Path input"
+			  label="JSON File Path"
+			  helpText="Suggested in plugin-build/json directory"
+			  placeholder='e.g., plugin-build/json/my-plugin.json'
+			  value={state.jsonFilePath}
+			  onChange={(e) => handleInputChange(e, 'jsonFilePath')}
 			/>
 			<BasicInput
-			label="Assets Path"
-			value={state.assetsPath}
-			placeholder='Assets Path'
-			onChange={(e) => handleInputChange(e, 'assetsPath')}
-			aria-label="Assets Path input"
+			  label="Assets Path"
+			  helpText="Define only the assets directory, the publisher will look inside for icon-256x256.jpg and banner-1500x620.jpg (icons, banner)"
+			  placeholder='e.g., plugin-build/assets'
+			  value={state.assetsPath}
+			  onChange={(e) => handleInputChange(e, 'assetsPath')}
 			/>
 			<BasicInput
-			label="Author Info File Path"
-			value={state.authorInfoPath}
-			placeholder='Author Info File Path'
-			onChange={(e) => handleInputChange(e, 'authorInfoPath')}
-			aria-label="Author Info File Path input"
+			  label="Author Info File Path"
+			  helpText="JSON file with author information"
+			  placeholder='e.g., plugin-build/json/author_info.json'
+			  value={state.authorInfoPath}
+			  onChange={(e) => handleInputChange(e, 'authorInfoPath')}
 			/>
-			<div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-				<Button onClick={updateJsonFile}>Update JSON</Button>
-				<Button onClick={validateJson}>Validate JSON</Button>
-				{state.isJsonValid && <Button onClick={handleUpload}>Upload Plugin</Button>}
-			</div>
-		</div>
-
-		<Divider marginSize='m'/>
-		
-		<div style={{ padding: '15px', borderRadius: '5px', marginTop: '20px' }}>
-			<Title size="m">Status</Title>
+		  </div>
+	
+		  <Divider marginSize='m'/>
+	
+		  <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '10px', marginTop: '20px' }}>
+			<Button onClick={updateJsonFile}>Update JSON</Button>
+			<Button onClick={validateJson}>Validate JSON</Button>
+			{state.isJsonValid && <Button onClick={handleUpload}>Upload Plugin</Button>}
+		  </div>
+	
+		  <Divider marginSize='m'/>
+		  
+		  <div style={{ marginTop: '20px' }}>
+			<Title size="m" style={{ marginBottom: '15px' }}>Status</Title>
 			<div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '10px', alignItems: 'center' }}>
-			<Text size="s" style={{ fontWeight: 'bold' }}>JSON Valid:</Text>
-			<Text size="s">{state.isJsonValid ? 'Yes' : 'No'}</Text>
-			
-			<Text size="s" style={{ fontWeight: 'bold' }}>Upload Status:</Text>
-			<Text size="s">{state.uploadStatus || 'pending'}</Text>
-			
-			<Text size="s" style={{ fontWeight: 'bold' }}>Upload Progress:</Text>
-			<div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+			  <Text size="s" style={{ fontWeight: 'bold' }}>JSON Valid:</Text>
+			  <Text size="s">{state.isJsonValid ? 'Yes' : 'No'}</Text>
+			  
+			  <Text size="s" style={{ fontWeight: 'bold' }}>Upload Status:</Text>
+			  <Text size="s">{state.uploadStatus || 'Pending'}</Text>
+			  
+			  <Text size="s" style={{ fontWeight: 'bold' }}>Upload Progress:</Text>
+			  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
 				<ProgressBar 
-				progress={(uploadProgress.step / uploadProgress.totalSteps) * 100} 
-				showNumber={true}
+				  progress={(uploadProgress.step / uploadProgress.totalSteps) * 100} 
+				  showNumber={true}
 				/>
 				<Text size="s">
-				{state.uploadStatus === 'Upload successful' ? 'Complete' : `Step ${uploadProgress.step} of ${uploadProgress.totalSteps}`}
+				  {state.uploadStatus === 'Upload successful' ? 'Complete' : `Step ${uploadProgress.step} of ${uploadProgress.totalSteps}`}
 				</Text>
-			</div>
-			
-			{state.zipUrl && (
+			  </div>
+			  
+			  {state.zipUrl && (
 				<>
-				<Text size="s" style={{ fontWeight: 'bold' }}>Zip URL:</Text>
-				<CopyInput
+				  <Text size="s" style={{ fontWeight: 'bold' }}>Zip URL:</Text>
+				  <CopyInput
 					value={`${process.env.BUCKET_URL}/${state.zipUrl}`}
 					aria-label="Zip URL"
 					style={{ width: '100%' }}
-				/>
+				  />
 				</>
-			)}
-			
-			{state.metadataUrl && (
+			  )}
+			  
+			  {state.metadataUrl && (
 				<>
-				<Text size="s" style={{ fontWeight: 'bold' }}>Metadata URL:</Text>
-				<CopyInput
+				  <Text size="s" style={{ fontWeight: 'bold' }}>Metadata URL:</Text>
+				  <CopyInput
 					value={`${process.env.BUCKET_URL}/${state.metadataUrl}`}
 					aria-label="Metadata URL"
 					style={{ width: '100%' }}
-				/>
+				  />
 				</>
-			)}
-
-			{state.assetsUrl && (
+			  )}
+	
+			  {state.assetsUrl && (
 				<>
-				<Text size="s" style={{ fontWeight: 'bold' }}>Assets URL:</Text>
-				<CopyInput
+				  <Text size="s" style={{ fontWeight: 'bold' }}>Assets URL:</Text>
+				  <CopyInput
 					value={state.assetsUrl}
 					aria-label="Assets URL"
 					style={{ width: '100%' }}
-				/>
+				  />
 				</>
-			)}
+			  )}
 			</div>
+		  </div>
+		  <ScaffoldModal
+			isOpen={showScaffoldModal}
+			onRequestClose={() => setShowScaffoldModal(false)}
+			onSuccess={handleScaffoldSuccess}
+		  />
 		</div>
-		</div>
-	);
-};
+	  );
+	};
 
 export default RepoPluginUploader;

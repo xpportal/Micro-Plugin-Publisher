@@ -97,7 +97,7 @@ To enable automatic updates for your plugin, you need to implement the update me
        $version = 'YOUR_PLUGIN_VERSION';
        $metadata_url = 'https://your-api.com/plugin-metadata.json';
        $zip_url = 'https://your-api.com/plugin-download.zip';
-       new \xrPublisher\Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $metadata_url, $zip_url);
+       new \microUpgrader\Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $metadata_url, $zip_url);
    }
    add_action('init', 'initialize_plugin_updater');
    ```
