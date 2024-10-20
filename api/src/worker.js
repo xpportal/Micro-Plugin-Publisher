@@ -190,36 +190,51 @@ handleOptions(request) {
 
   // Handle POST /upload-json
   async handleUploadJson(request, env) {
-    try {
-      const { userId, pluginName, jsonData } = await request.json();
-
-      console.log(`Received JSON data for plugin: ${pluginName}`);
-
-      const sanitizedPluginName = pluginName.replace(/\s/g, '-');
-      const folderName = `${userId}`;
-      const jsonKey = `${folderName}/${sanitizedPluginName}/${sanitizedPluginName}.json`;
-
-      await env.PLUGIN_BUCKET.put(jsonKey, JSON.stringify(jsonData), {
-        httpMetadata: {
-          contentType: 'application/json',
-        },
-      });
-
-      console.log('Successfully stored JSON data');
-
-      return new Response(JSON.stringify({ success: true, message: 'JSON uploaded successfully' }), {
-        status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      });
-    } catch (error) {
-      console.error('JSON upload error:', error);
-      return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
-        status: 500,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      });
-    }
+	try {
+	  const { userId, pluginName, jsonData } = await request.json();
+  
+	  console.log(`Received JSON data for plugin: ${pluginName}`);
+  
+	  const sanitizedPluginName = pluginName.replace(/\s/g, '-');
+	  const folderName = `${userId}`;
+	  const jsonKey = `${folderName}/${sanitizedPluginName}/${sanitizedPluginName}.json`;
+  
+	  // Ensure jsonData is the correct structure
+	  let processedJsonData = jsonData;
+	  if (typeof jsonData === 'string') {
+		processedJsonData = JSON.parse(jsonData);
+	  }
+	  
+	  // If it's not an array or it has a "0" key, correct the structure
+	  if (!Array.isArray(processedJsonData) || processedJsonData[0] && '0' in processedJsonData[0]) {
+		processedJsonData = [processedJsonData['0'] || processedJsonData];
+	  }
+  
+	  // Remove any unwanted outer properties
+	  if (processedJsonData[0].pluginName) delete processedJsonData[0].pluginName;
+	  if (processedJsonData[0].authorInfo) delete processedJsonData[0].authorInfo;
+  
+	  await env.PLUGIN_BUCKET.put(jsonKey, JSON.stringify(processedJsonData), {
+		httpMetadata: {
+		  contentType: 'application/json',
+		},
+	  });
+  
+	  console.log('Successfully stored JSON data');
+  
+	  return new Response(JSON.stringify({ success: true, message: 'JSON uploaded successfully' }), {
+		status: 200,
+		headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+	  });
+	} catch (error) {
+	  console.error('JSON upload error:', error);
+	  return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
+		status: 500,
+		headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+	  });
+	}
   },
-
+	
   // Handle POST /finalize-upload
   async handleFinalizeUpload(request, env) {
     try {
@@ -277,25 +292,40 @@ handleOptions(request) {
 
       console.log('Successfully combined chunks and stored ZIP file');
 
-      // Fetch and include author info in the final metadata
-      const authorInfoKey = `${userId}/${pluginName}/author_info.json`;
-      const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
-      let authorInfo = {};
-      if (authorInfoObject) {
-        authorInfo = JSON.parse(await authorInfoObject.text());
-      }
+    // Fetch author info
+    const authorInfoKey = `${userId}/author_info.json`;
+    const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
+    let authorInfo = {};
+    if (authorInfoObject) {
+      authorInfo = JSON.parse(await authorInfoObject.text());
+    }
 
-      const finalMetadata = {
-        ...metadata,
-        authorInfo
+    // Ensure metadata is in the correct format
+    let finalMetadata = metadata;
+    if (!Array.isArray(finalMetadata)) {
+      finalMetadata = [finalMetadata];
+    }
+    if (finalMetadata[0] && '0' in finalMetadata[0]) {
+      finalMetadata = [finalMetadata[0]['0']];
+    }
+
+    // Update the contributors field with author info
+    if (finalMetadata[0] && finalMetadata[0].contributors) {
+      const authorUsername = Object.keys(finalMetadata[0].contributors)[0];
+      finalMetadata[0].contributors[authorUsername] = {
+        profile: authorInfo.website || `https://app.xr.foundation/plugins/${userId}`,
+        avatar: authorInfo.avatar_url || '',
+        display_name: authorInfo.username || authorUsername
       };
+    }
 
-      const metadataKey = `${userId}/${pluginName}/${pluginName}.json`;
-      await env.PLUGIN_BUCKET.put(metadataKey, JSON.stringify(finalMetadata), {
-        httpMetadata: {
-          contentType: 'application/json',
-        },
-      });
+    const metadataKey = `${userId}/${pluginName}/${pluginName}.json`;
+    await env.PLUGIN_BUCKET.put(metadataKey, JSON.stringify(finalMetadata), {
+      httpMetadata: {
+        contentType: 'application/json',
+      },
+    });
+
 
       const zipUrl = `${objectKey}`;
       const metadataUrl = `${metadataKey}`;
@@ -324,7 +354,7 @@ handleOptions(request) {
       const { userId, pluginName, authorData } = await request.json();
 
       if (!userId || !pluginName || !authorData) {
-        return new Response(JSON.stringify({ error: 'Missing userId, pluginName, or authorData' }), {
+        return new Response(JSON.stringify({ error: `Missing userId, pluginName, or authorData received ${userId}, ${pluginName}, ${authorData}` }), {
           status: 400,
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         });
