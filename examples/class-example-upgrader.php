@@ -1,9 +1,8 @@
 <?php
 /**
- * Custom Plugin Updater for XR Publisher
+ * Custom Plugin Updater for Micro Plugin Publisher
  *
- * BRUTE FOCED WORK IN PROGRESS
- * This is a brute force example of how to implement a custom plugin updater for XR Publisher.
+ * This is a basic example of how to implement a custom plugin updater for your Micro Plugin Publisher managed project.
  * @package microUpgrader
  */
 
@@ -16,7 +15,6 @@
 //     new Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $update_url);
 // }
 // add_action('init', 'microUpgrader\initialize_Micro_Plugin_Publisher_Updater');
-
 
 namespace MicroUpgrader;
 
@@ -43,14 +41,7 @@ class Micro_Plugin_Publisher_Updater {
     }
 
     public function check_for_update($transient) {
-        if (empty($transient->checked)) {
-            return $transient;
-        }
-
         $remote_info = $this->get_remote_info();
-
-		// only use the 0 object in remote info
-		$remote_info = $remote_info->{"0"};
 
         if (is_wp_error($remote_info)) {
             return $transient;
@@ -88,11 +79,12 @@ class Micro_Plugin_Publisher_Updater {
 
         $remote_info = $this->get_remote_info();
 
-		$remote_info = $remote_info->{"0"};
-
         if (is_wp_error($remote_info)) {
             return $false;
         }
+
+        // Assuming the response is an array, get the first element
+        $remote_info = $remote_info[0];
 
         $response = new \stdClass();
         $response->name = $remote_info->name;
@@ -124,10 +116,11 @@ class Micro_Plugin_Publisher_Updater {
         $body = wp_remote_retrieve_body($request);
         $data = json_decode($body);
 
-        if (empty($data) || !is_object($data)) {
+        if (empty($data) || !is_array($data)) {
             return new \WP_Error('invalid_response', 'Invalid update server response.');
         }
 
-        return $data;
+        // Return the first object in the array
+        return $data[0];
     }
 }
