@@ -78,12 +78,12 @@ The addon looks for your files in the Local by Flywheel site structure:
 4. If validation is successful, upload the plugin.
 5. The addon will provide you with URLs for the uploaded zip file and metadata.
 
-## API Setup
+## API Setup: [`Setup Instructions Here`](api/README.md)
 
 To set up your own plugin distribution API:
 
 1. Navigate to the `api` directory.
-2. Follow the instructions in `api/README.md` to deploy the worker and R2 bucket using Cloudflare.
+2. Follow the instructions in [`api/README.md`](api/README.md) to deploy the worker and R2 bucket using Cloudflare.
 
 ## Enabling Automatic Updates
 
