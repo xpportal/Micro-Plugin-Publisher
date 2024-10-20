@@ -14,18 +14,12 @@ Before you begin, ensure you have the following:
 
 ## Quick Start
 
-1. Clone this repository:
-   ```
-   git clone https://github.com/antpb/plugin-publishing-system.git
-   cd plugin-publishing-system
-   ```
-
-2. Run the setup script:
+1. Run the setup script:
    ```
    ./setup.sh
    ```
 
-3. Follow the prompts to complete the setup process.
+2. Follow the prompts to complete the setup process.
 
 ## Detailed Setup Instructions
 
@@ -72,7 +66,7 @@ The Plugin Publishing System provides the following endpoints:
 - `POST /update-author-info`: Update author information
 - `POST /upload-asset`: Upload plugin assets (e.g., icons, banners)
 
-To use these endpoints, you'll need to include your API Secret in the `Authorization` header of your requests as a Bearer token.
+To use the `POST` endpoints, you'll need to include your API Secret in the `Authorization` header of your requests as a Bearer token.
 
 ## Customization
 
