@@ -2,7 +2,7 @@
 
 Micro Plugin Publisher is a Local WP add-on that streamlines the process of publishing and updating WordPress plugins. It provides a user-friendly interface within Local WP and includes API tooling for self-hosted plugin distribution.
 
-![Micro Plugin Publisher Preview](docs/assets/micro-plugin-publisher-preview.jpg)
+![Micro Plugin Publisher Preview](docs/assets/micro-plugin-publisher-preview-update.jpg)
 
 ## Features
 
