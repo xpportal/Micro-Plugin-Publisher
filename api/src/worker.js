@@ -93,7 +93,7 @@ handleOptions(request) {
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         });
       }
-
+	  console.log(JSON.stringify(authorData));
       const plugins = await this.fetchAuthorPlugins(author, env);
 
       const response = {
@@ -349,41 +349,47 @@ handleOptions(request) {
   },
 
   // Handle POST /update-author-info
-  async handleUpdateAuthorInfo(request, env) {
-    try {
-      const { userId, pluginName, authorData } = await request.json();
+async handleUpdateAuthorInfo(request, env) {
+	try {
+		const { userId, pluginName, authorData } = await request.json();
 
-      if (!userId || !pluginName || !authorData) {
-        return new Response(JSON.stringify({ error: `Missing userId, pluginName, or authorData received ${userId}, ${pluginName}, ${authorData}` }), {
-          status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        });
-      }
+		if (!userId || !pluginName || !authorData) {
+			return new Response(JSON.stringify({ error: `Missing userId, pluginName, or authorData received ${userId}, ${pluginName}, ${authorData}` }), {
+				status: 400,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
 
-      console.log(`Received author info for plugin: ${pluginName}`);
+		// Convert authorData from serialized JSON to object if necessary
+		let parsedAuthorData = authorData;
+		if (typeof authorData === 'string') {
+			parsedAuthorData = JSON.parse(authorData);
+		}
 
-      const authorInfoKey = `${userId}/author_info.json`;
+		console.log(`Received author info for plugin: ${pluginName}`);
 
-      await env.PLUGIN_BUCKET.put(authorInfoKey, JSON.stringify(authorData), {
-        httpMetadata: {
-          contentType: 'application/json',
-        },
-      });
+		const authorInfoKey = `${userId}/author_info.json`;
 
-      console.log('Successfully stored author info');
+		await env.PLUGIN_BUCKET.put(authorInfoKey, JSON.stringify(parsedAuthorData, null, 2), {
+			httpMetadata: {
+				contentType: 'application/json',
+			},
+		});
 
-      return new Response(JSON.stringify({ success: true, message: 'Author info uploaded successfully' }), {
-        status: 200,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      });
-    } catch (error) {
-      console.error('Author info upload error:', error);
-      return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
-        status: 500,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      });
-    }
-  },
+		console.log('Successfully stored author info');
+
+		return new Response(JSON.stringify({ success: true, message: 'Author info uploaded successfully' }), {
+			status: 200,
+			headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+		});
+	} catch (error) {
+		console.error('Author info upload error:', error);
+		return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
+			status: 500,
+			headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+		});
+	}
+},
 
   // Handle POST /upload-asset
   async handleUploadAsset(request, env) {
@@ -424,26 +430,23 @@ handleOptions(request) {
     }
   },
 
-  // Helper function to fetch author data
-  async fetchAuthorData(author, env) {
-    const authorInfoKey = `${author}/author_info.json`;
-    
-    try {
-      const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
-      
-      if (!authorInfoObject) {
-        console.error(`Author info not found for ${author}`);
-        return null;
-      }
-
-      const authorData = JSON.parse(await authorInfoObject.text());
-      authorData.authorId = author;
-      return authorData;
-    } catch (error) {
-      console.error(`Error fetching author data for ${author}:`, error);
-      return null;
-    }
-  },
+// Helper function to fetch author data
+async fetchAuthorData(author, env) {
+	const authorInfoKey = `${author}/author_info.json`;
+	
+	try {
+		const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
+		if (!authorInfoObject) {
+			console.error(`Author info not found for ${author}`);
+			return null;
+		}
+		const authorInfoText = await authorInfoObject.text();
+		return JSON.parse(authorInfoText);
+	} catch (error) {
+		console.error(`Error fetching author data for ${author}:`, error);
+		return null;
+	}
+},
 
   // Helper function to fetch author plugins
   async fetchAuthorPlugins(author, env) {
@@ -485,11 +488,13 @@ handleOptions(request) {
 	}
 
 	// Authenticate the request
-	if (!this.authenticateRequest(request, env)) {
-	  return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-		status: 401,
-		headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-	  });
+	if (request.method !== 'GET') {
+		if (!this.authenticateRequest(request, env)) {
+		return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+			status: 401,
+			headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+		});
+		}
 	}
 
 	// Route the request
