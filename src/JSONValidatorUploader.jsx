@@ -383,7 +383,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 	}, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, site.path, apiKey, apiUrl, bucketUrl]);
 
 	return (
-		<div style={{ flex: '1', overflowY: 'auto', padding: '20px', maxWidth: '900px', margin: '0 auto' }}>
+		<div style={{ flex: '1', overflowY: 'auto', padding: '20px', maxWidth: '90%', margin: '0 auto' }}>
 		  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
 			<Title size="xl">Plugin Publisher</Title>
 			<Button onClick={toggleScaffoldModal}>Scaffold Plugin</Button>
