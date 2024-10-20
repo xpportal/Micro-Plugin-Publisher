@@ -486,17 +486,6 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 							/>
 						</>
 					)}
-
-					{state.assetsUrl && (
-						<>
-							<Text size="s" style={{ fontWeight: 'bold' }}>Assets URL:</Text>
-							<CopyInput
-								value={state.assetsUrl}
-								aria-label="Assets URL"
-								style={{ width: '100%' }}
-							/>
-						</>
-					)}
 				</div>
 			</div>
 			<ScaffoldModal
