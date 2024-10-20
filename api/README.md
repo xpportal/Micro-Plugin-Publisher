@@ -75,7 +75,7 @@ To modify the worker's functionality:
 1. Edit the `src/index.js` file.
 2. Deploy your changes using:
    ```
-   wrangler deploy
+   npx wrangler deploy
    ```
 
 ## Security Considerations
@@ -87,7 +87,7 @@ To modify the worker's functionality:
 ## Troubleshooting
 
 1. **Wrangler not found**: Ensure Wrangler is installed globally: `npm install -g wrangler`
-2. **Deployment fails**: Verify you're logged in to your Cloudflare account: `wrangler login`
+2. **Deployment fails**: Verify you're logged in to your Cloudflare account: `npx wrangler login`
 3. **R2 bucket creation fails**: Confirm R2 is enabled for your Cloudflare account
 4. **API requests fail**: Double-check you're using the correct API Secret in your requests
 
