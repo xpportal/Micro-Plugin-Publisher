@@ -55,7 +55,7 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
 
 2. Use the "Scaffold Plugin" button to create a new plugin structure.
 
-![Micro Plugin Publisher Preview](docs/assets/micro-plugin-publisher-preview-update.jpg)
+![Scaffold Plugin Interface](docs/assets/scaffold-plugin.jpg)
 
 
 3. For existing plugins:
