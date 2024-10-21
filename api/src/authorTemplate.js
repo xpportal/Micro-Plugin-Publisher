@@ -87,7 +87,7 @@ export default function generateAuthorHTML(authorData) {
 		  </div>
 		  <div class="bg-black py-8">
 			<div class="container mx-auto px-4 text-center text-gray-200">
-			  <p>&copy; ${new Date().getFullYear()} Your Footer Text. All rights reserved.</p>
+			  <p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
 			  <p>
 				<a href="/terms" class="text-green-400 hover:underline">Terms of Service</a> | 
 				<a href="/privacy" class="text-green-400 hover:underline">Privacy Policy</a>

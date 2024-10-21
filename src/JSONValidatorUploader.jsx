@@ -373,6 +373,8 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 				zipUrl: uploadResult.zipUrl,
 				metadataUrl: uploadResult.metadataUrl,
 				assetsUrl: uploadResult.assetsUrl,
+				userId: uploadResult.userId,
+				pluginName: uploadResult.pluginName
 			}));
 			setUploadProgress(prev => ({ ...prev, step: 5, totalSteps: 5 }));
 
@@ -481,6 +483,18 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 							<Text size="s" style={{ fontWeight: 'bold' }}>Metadata URL:</Text>
 							<CopyInput
 								value={`${process.env.BUCKET_URL}/${state.metadataUrl}`}
+								aria-label="Metadata URL"
+								style={{ width: '100%' }}
+							/>
+							<Text size="s" style={{ fontWeight: 'bold' }}>Plugin Page URL:</Text>
+							<CopyInput
+								value={`${process.env.PLUGIN_API_URL}/directory/${state.userId}/${state.pluginName}`}
+								aria-label="Metadata URL"
+								style={{ width: '100%' }}
+							/>
+							<Text size="s" style={{ fontWeight: 'bold' }}>Author Page URL:</Text>
+							<CopyInput
+								value={`${process.env.PLUGIN_API_URL}/author/${state.userId}`}
 								aria-label="Metadata URL"
 								style={{ width: '100%' }}
 							/>

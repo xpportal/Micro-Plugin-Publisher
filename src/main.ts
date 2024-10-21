@@ -520,6 +520,8 @@ export default function (context: LocalMain.AddonMainContext): void {
 					zipUrl: finalizeResponse.zipUrl,
 					metadataUrl: finalizeResponse.metadataUrl,
 					assetsUrl: uploadedAssets,
+					userId,
+					pluginName,
 				};
 			}
 			throw new Error('Failed to finalize plugin upload: ' + (finalizeResponse.error || 'Unknown error'));
