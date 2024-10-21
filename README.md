@@ -18,8 +18,16 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
 - Backup solution for versioining
 
 ![Plugin Page](docs/assets/plugin-page.jpg)
+
+Example Plugin Page:
+https://micro-plugin-publisher.sxpdigital.workers.dev/directory/antpb/xr-publisher
+
 ![Author Page](docs/assets/author-page.jpg)
 
+Example Author Page:
+https://micro-plugin-publisher.sxpdigital.workers.dev/author/antpb
+
+Example 
 
 ## Installation
 
