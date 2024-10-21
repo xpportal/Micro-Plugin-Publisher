@@ -392,7 +392,75 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 	addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFile, jsonFile, metadata, assetsPath, authorData, apiKey, apiUrl }) => {
 		try {
-			// Step 1: Upload ZIP file in chunks
+			// Step 0: Check if the plugin exists and compare versions if it does
+			let pluginDataResponse;
+			try {
+				pluginDataResponse = await makeApiCall(`${apiUrl}/plugin-data`, 'GET', {
+					author: userId,
+					slug: pluginName,
+					apiKey,
+				});
+			} catch (error) {
+				// If the error is "Plugin not found", treat it as a new plugin
+				if (error.message.includes('Plugin not found')) {
+					pluginDataResponse = { error: 'Plugin not found' };
+				} else {
+					// For other errors, rethrow
+					throw error;
+				}
+			}
+
+			const newVersion = metadata[0].version;
+			let isNewPlugin = false;
+
+			if (pluginDataResponse.error === 'Plugin not found') {
+				logger.info('New plugin detected, bypassing version check');
+				isNewPlugin = true;
+			} else {
+				const existingVersion = pluginDataResponse[0].version;
+				if (!compareVersions(newVersion, existingVersion)) {
+					throw new Error(`New version (${newVersion}) must be higher than the existing version (${existingVersion})`);
+				}
+				logger.info(`New version (${newVersion}) is higher than existing version (${existingVersion}), creating backup and proceeding with upload`);
+
+				// Create backup of the existing version
+				const backupResponse = await makeApiCall(`${apiUrl}/backup-plugin`, 'POST', {
+					author: userId,
+					slug: pluginName,
+					version: existingVersion,
+					apiKey,
+				});
+
+				if (!backupResponse.success) {
+					throw new Error(`Failed to create backup: ${backupResponse.error || 'Unknown error'}`);
+				}
+				logger.info(`Backup created for version ${existingVersion}`);
+			}
+
+			Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
+				step: 0,
+				totalSteps: 6,
+			});
+
+			// Rest of the upload process
+			// Step 1: Upload JSON file
+			const jsonResponse = await makeApiCall(`${apiUrl}/plugin-upload-json`, 'POST', {
+				userId,
+				pluginName,
+				jsonData: jsonFile,
+				apiKey,
+			});
+
+			if (!jsonResponse.success) {
+				throw new Error('Failed to upload JSON file: ' + (jsonResponse.error || 'Unknown error'));
+			}
+
+			Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
+				step: 1,
+				totalSteps: 6,
+			});
+
+			// Step 2: Upload ZIP file in chunks
 			const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
 			const totalChunks = Math.ceil(zipFile.length / CHUNK_SIZE);
 
@@ -409,7 +477,6 @@ export default function (context: LocalMain.AddonMainContext): void {
 					fileData: base64Chunk,
 					chunkNumber,
 					totalChunks,
-					apiUrl,
 					apiKey,
 				});
 
@@ -418,37 +485,18 @@ export default function (context: LocalMain.AddonMainContext): void {
 				}
 
 				Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
-					step: 1,
-					totalSteps: 5,
+					step: 2,
+					totalSteps: 6,
 					chunkNumber,
 					totalChunks,
 				});
 			}
-			logger.info(`Json file: ${jsonFile}`);
-			// Step 2: Upload JSON file
-			const jsonResponse = await makeApiCall(`${apiUrl}/plugin-upload-json`, 'POST', {
-				userId,
-				pluginName,
-				jsonData: jsonFile,
-				apiUrl,
-				apiKey,
-			});
-
-			if (!jsonResponse.success) {
-				throw new Error('Failed to upload JSON file: ' + (jsonResponse.error || 'Unknown error'));
-			}
-
-			Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
-				step: 2,
-				totalSteps: 5,
-			});
 
 			// Step 3: Update author info
 			const authorInfoResponse = await makeApiCall(`${apiUrl}/update-author-info`, 'POST', {
 				userId,
 				pluginName,
 				authorData,
-				apiUrl,
 				apiKey,
 			});
 
@@ -458,7 +506,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 			Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
 				step: 3,
-				totalSteps: 5,
+				totalSteps: 6,
 			});
 
 			// Step 4: Upload assets
@@ -481,7 +529,6 @@ export default function (context: LocalMain.AddonMainContext): void {
 					pluginName,
 					fileName: assetFile,
 					fileData: base64Content,
-					apiUrl,
 					apiKey,
 				});
 
@@ -493,7 +540,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 				Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
 					step: 4,
-					totalSteps: 5,
+					totalSteps: 6,
 					chunkNumber: i + 1,
 					totalChunks: assetFiles.length,
 				});
@@ -505,13 +552,12 @@ export default function (context: LocalMain.AddonMainContext): void {
 				pluginName,
 				zipFileSize: zipFile.length,
 				metadata,
-				apiUrl,
 				apiKey,
 			});
 
 			Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {
 				step: 5,
-				totalSteps: 5,
+				totalSteps: 6,
 			});
 
 			if (finalizeResponse.success) {
@@ -522,6 +568,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 					assetsUrl: uploadedAssets,
 					userId,
 					pluginName,
+					isNewPlugin,
 				};
 			}
 			throw new Error('Failed to finalize plugin upload: ' + (finalizeResponse.error || 'Unknown error'));
@@ -531,6 +578,22 @@ export default function (context: LocalMain.AddonMainContext): void {
 			return { success: false, error: error instanceof Error ? error.message : String(error) };
 		}
 	});
+
+	// Helper function to compare version strings
+	function compareVersions(v1, v2) {
+		const parts1 = v1.split('.').map(Number);
+		const parts2 = v2.split('.').map(Number);
+
+		for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+			const part1 = parts1[i] || 0;
+			const part2 = parts2[i] || 0;
+
+			if (part1 > part2) return true;
+			if (part1 < part2) return false;
+		}
+
+		return false; // versions are equal
+	}
 
 	logger.info('Repo Plugin Uploader addon initialized');
 }

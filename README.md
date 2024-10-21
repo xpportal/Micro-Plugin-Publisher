@@ -2,7 +2,7 @@
 
 Micro Plugin Publisher is a Local WP add-on that streamlines the process of publishing, updating, and scaffolding WordPress plugins. It provides a user-friendly interface within Local WP and includes API tooling for self-hosted plugin distribution.
 
-![Micro Plugin Publisher Preview](docs/assets/micro-plugin-publisher-preview-update.jpg)
+![Micro Plugin Publisher Preview](docs/assets/micro-plugin-publisher-preview-update-2.jpg)
 
 ## Features
 
@@ -77,6 +77,34 @@ The addon looks for your files in the Local by Flywheel site structure:
 3. Validate the JSON file.
 4. If validation is successful, upload the plugin.
 5. The addon will provide you with URLs for the uploaded zip file and metadata.
+
+## Version Checking and Backup
+
+The Micro Plugin Publisher includes an automated version checking and backup mechanism to prevent accidental overwrites and maintain version history:
+
+1. **Version Check**: Before uploading a new version of a plugin, the system compares the local info json defined version number with the existing version on the server.
+
+2. **Backup Creation**: If the new version is higher than the existing one, the addon automatically creates a backup of the current version before proceeding with the upload.
+
+3. **Backup Storage**: Backups are stored in a folder named with the version number, containing all relevant files (JSON metadata, ZIP file, and assets).
+
+4. **Upload Prevention**: The system prevents uploads if:
+   - The new version is the same as or lower than the existing version.
+   - The backup creation process fails for any reason.
+
+5. **Workflow**:
+   - The system first checks the version using the `/plugin-data` endpoint.
+   - If a higher version is detected, it calls the `/backup-plugin` endpoint to create a backup.
+   - Only after successful backup creation does the upload process continue.
+
+This mechanism ensures that:
+- Users cannot accidentally overwrite their plugins with older or identical versions.
+- A history of plugin versions is maintained, allowing for easy rollback if needed.
+- The integrity of the plugin versioning system is preserved.
+
+To use this feature, ensure your plugin's metadata includes a valid `version` field, following semantic versioning principles (e.g., "1.0.0", "2.1.3").
+
+Note: This process happens automatically during the plugin upload process and requires no additional action from the user beyond providing the correct version number in the plugin metadata that is located in the `plugin-build/json` folder.
 
 ## API Setup: [`Setup Instructions Here`](api/README.md)
 

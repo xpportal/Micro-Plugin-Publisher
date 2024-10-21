@@ -37,166 +37,172 @@ export default {
 	},
 
 	// Handle GET /plugin-data
-// Handle GET /plugin-data
-async handleGetPluginData(request, env) {
-	try {
-	  const url = new URL(request.url);
-	  const author = url.searchParams.get('author');
-	  const slug = url.searchParams.get('slug');
-  
-	  if (!author || !slug) {
-		return new Response(JSON.stringify({ error: 'Missing author or slug parameter' }), {
-		  status: 400,
-		  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-		});
-	  }
-  
-	  // Check cache first
-	  const cacheKey = `plugin-data:${author}:${slug}`;
-	  const cache = caches.default;
-	  let response = await cache.match(request);
-  
-	  if (!response) {
-		const jsonKey = `${author}/${slug}/${slug}.json`;
-		const jsonObject = await env.PLUGIN_BUCKET.get(jsonKey);
-  
-		if (!jsonObject) {
-		  return new Response(JSON.stringify({ error: 'Plugin not found' }), {
-			status: 404,
-			headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-		  });
-		}
-  
-		const jsonData = await jsonObject.text();
-		response = new Response(jsonData, {
-		  status: 200,
-		  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-		});
-  
-		// Cache the response
-		response.headers.set('Cache-Control', 'public, max-age=3600');
-		await cache.put(request, response.clone());
-	  }
-  
-	  return response;
-	} catch (error) {
-	  console.error('Get plugin data error:', error);
-	  return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
-		status: 500,
-		headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-	  });
-	}
-  },
-  
-// Handle GET /author-data
-async handleGetAuthorData(request, env) {
-	try {
-	  const url = new URL(request.url);
-	  const author = url.searchParams.get('author');
-  
-	  if (!author) {
-		return new Response(JSON.stringify({ error: 'Missing author parameter' }), {
-		  status: 400,
-		  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-		});
-	  }
-  
-	  // Check cache first
-	  const cacheKey = `author-data:${author}`;
-	  const cache = caches.default;
-	  let response = await cache.match(request);
-  
-	  if (!response) {
-		const authorData = await this.fetchAuthorData(author, env);
-  
-		if (!authorData) {
-		  return new Response(JSON.stringify({ error: 'Author not found' }), {
-			status: 404,
-			headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-		  });
-		}
-  
-		const plugins = await this.fetchAuthorPlugins(author, env);
-  
-		const responseData = {
-		  ...authorData,
-		  plugins,
-		};
-  
-		response = new Response(JSON.stringify(responseData), {
-		  status: 200,
-		  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-		});
-  
-		// Cache the response
-		response.headers.set('Cache-Control', 'public, max-age=3600');
-		await cache.put(request, response.clone());
-	  }
-  
-	  return response;
-	} catch (error) {
-	  console.error('Get author data error:', error);
-	  return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
-		status: 500,
-		headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-	  });
-	}
-  },
-  
-// Handle GET /authors-list
-async handleGetAuthorsList(env) {
-	try {
-	  // Check cache first
-	  const cacheKey = 'authors-list';
-	  const cache = caches.default;
-	  let response = await cache.match(cacheKey);
-  
-	  if (!response) {
-		const list = await env.PLUGIN_BUCKET.list();
-		const authors = [];
-  
-		for (const item of list.objects) {
-		  const parts = item.key.split('/');
-		  if (parts.length > 1 && parts[1] === 'author_info.json') {
-			const authorInfoKey = item.key;
-			const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
-  
-			if (authorInfoObject) {
-			  const authorData = JSON.parse(await authorInfoObject.text());
-			  authorData.authorId = parts[0];
-  
-			  const authorPrefix = `${parts[0]}/`;
-			  const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: authorPrefix });
-			  const pluginCount = pluginsList.objects.filter(obj => obj.key.endsWith('.json') && !obj.key.endsWith('author_info.json')).length;
-  
-			  authors.push({
-				...authorData,
-				plugin_count: pluginCount
-			  });
+	// Handle GET /plugin-data
+	async handleGetPluginData(request, env) {
+		try {
+			const url = new URL(request.url);
+			const author = url.searchParams.get('author');
+			const slug = url.searchParams.get('slug');
+
+			if (!author || !slug) {
+				return new Response(JSON.stringify({ error: 'Missing author or slug parameter' }), {
+					status: 400,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
 			}
-		  }
+
+			//if api key is valid bust the cache
+			if (this.authenticateRequest(request, env)) {
+				const cache = caches.default;
+				await cache.delete(request);
+			}
+
+			// Check cache first
+			const cacheKey = `plugin-data:${author}:${slug}`;
+			const cache = caches.default;
+			let response = await cache.match(request);
+
+			if (!response) {
+				const jsonKey = `${author}/${slug}/${slug}.json`;
+				const jsonObject = await env.PLUGIN_BUCKET.get(jsonKey);
+
+				if (!jsonObject) {
+					return new Response(JSON.stringify({ error: 'Plugin not found' }), {
+						status: 404,
+						headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+					});
+				}
+
+				const jsonData = await jsonObject.text();
+				response = new Response(jsonData, {
+					status: 200,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+
+				// Cache the response
+				response.headers.set('Cache-Control', 'public, max-age=3600');
+				await cache.put(request, response.clone());
+			}
+
+			return response;
+		} catch (error) {
+			console.error('Get plugin data error:', error);
+			return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
 		}
-  
-		response = new Response(JSON.stringify(authors), {
-		  status: 200,
-		  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-		});
-  
-		// Cache the response
-		response.headers.set('Cache-Control', 'public, max-age=3600');
-		await cache.put(cacheKey, response.clone());
-	  }
-  
-	  return response;
-	} catch (error) {
-	  console.error('Get authors list error:', error);
-	  return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
-		status: 500,
-		headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-	  });
-	}
-  },
-  
+	},
+
+	// Handle GET /author-data
+	async handleGetAuthorData(request, env) {
+		try {
+			const url = new URL(request.url);
+			const author = url.searchParams.get('author');
+
+			if (!author) {
+				return new Response(JSON.stringify({ error: 'Missing author parameter' }), {
+					status: 400,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			// Check cache first
+			const cacheKey = `author-data:${author}`;
+			const cache = caches.default;
+			let response = await cache.match(request);
+
+			if (!response) {
+				const authorData = await this.fetchAuthorData(author, env);
+
+				if (!authorData) {
+					return new Response(JSON.stringify({ error: 'Author not found' }), {
+						status: 404,
+						headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+					});
+				}
+
+				const plugins = await this.fetchAuthorPlugins(author, env);
+
+				const responseData = {
+					...authorData,
+					plugins,
+				};
+
+				response = new Response(JSON.stringify(responseData), {
+					status: 200,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+
+				// Cache the response
+				response.headers.set('Cache-Control', 'public, max-age=3600');
+				await cache.put(request, response.clone());
+			}
+
+			return response;
+		} catch (error) {
+			console.error('Get author data error:', error);
+			return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+
+	// Handle GET /authors-list
+	async handleGetAuthorsList(env) {
+		try {
+			// Check cache first
+			const cacheKey = 'authors-list';
+			const cache = caches.default;
+			let response = await cache.match(cacheKey);
+
+			if (!response) {
+				const list = await env.PLUGIN_BUCKET.list();
+				const authors = [];
+
+				for (const item of list.objects) {
+					const parts = item.key.split('/');
+					if (parts.length > 1 && parts[1] === 'author_info.json') {
+						const authorInfoKey = item.key;
+						const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
+
+						if (authorInfoObject) {
+							const authorData = JSON.parse(await authorInfoObject.text());
+							authorData.authorId = parts[0];
+
+							const authorPrefix = `${parts[0]}/`;
+							const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: authorPrefix });
+							const pluginCount = pluginsList.objects.filter(obj => obj.key.endsWith('.json') && !obj.key.endsWith('author_info.json')).length;
+
+							authors.push({
+								...authorData,
+								plugin_count: pluginCount
+							});
+						}
+					}
+				}
+
+				response = new Response(JSON.stringify(authors), {
+					status: 200,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+
+				// Cache the response
+				response.headers.set('Cache-Control', 'public, max-age=3600');
+				await cache.put(cacheKey, response.clone());
+			}
+
+			return response;
+		} catch (error) {
+			console.error('Get authors list error:', error);
+			return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+
 	// Handle POST /upload-chunk
 	async handlePluginUploadChunk(request, env) {
 		try {
@@ -375,21 +381,21 @@ async handleGetAuthorsList(env) {
 
 			// Bust plugin directory cache
 			await cache.delete(`https://${request.headers.get('host')}/directory/${userId}/${sanitizedPluginName}`);
-		
+
 			// Bust plugin data cache
 			await cache.delete(`https://${request.headers.get('host')}/plugin-data?author=${userId}&slug=${sanitizedPluginName}`);
-		
+
 			// Bust author directory cache
 			await cache.delete(`https://${request.headers.get('host')}/author/${userId}`);
-		
+
 			// Bust author data cache
 			await cache.delete(`https://${request.headers.get('host')}/author-data?author=${userId}`);
-		
+
 			// Bust authors list cache
 			await cache.delete(`https://${request.headers.get('host')}/authors-list`);
-		
+
 			console.log(`Cache busted for plugin ${pluginName} and author ${userId}`);
-			
+
 
 			return new Response(JSON.stringify({
 				success: true,
@@ -440,18 +446,18 @@ async handleGetAuthorsList(env) {
 			console.log('Successfully stored author info');
 
 			const cache = caches.default;
-		
+
 			// Bust author directory cache
 			await cache.delete(`https://${request.headers.get('host')}/author/${userId}`);
-		
+
 			// Bust author data cache
 			await cache.delete(`https://${request.headers.get('host')}/author-data?author=${userId}`);
-		
+
 			// Bust authors list cache
 			await cache.delete(`https://${request.headers.get('host')}/authors-list`);
-		
+
 			console.log(`Cache busted for author ${userId}`);
-			
+
 
 			return new Response(JSON.stringify({ success: true, message: 'Author info uploaded successfully' }), {
 				status: 200,
@@ -558,148 +564,294 @@ async handleGetAuthorsList(env) {
 	async handleGetPluginDirectory(request, env) {
 		const url = new URL(request.url);
 		const pathParts = url.pathname.split('/').filter(part => part !== '');
-	  
+
 		if (pathParts.length !== 3 || pathParts[0] !== 'directory') {
-		  return new Response('Invalid URL format', { status: 400 });
+			return new Response('Invalid URL format', { status: 400 });
 		}
-	  
+
 		const author = pathParts[1];
 		const slug = pathParts[2];
-	  
+
 		// Check cache first
 		const cacheKey = `plugin:${author}:${slug}`;
 		const cache = caches.default;
 		let response = await cache.match(request);
-	  
+
 		if (!response) {
-		  try {
-			const pluginData = await this.fetchPluginData(author, slug, env);
-			const authorData = await this.fetchAuthorData(author, env);
-			if (!pluginData) {
-			  return new Response('Plugin not found', { status: 404 });
+			try {
+				const pluginData = await this.fetchPluginData(author, slug, env);
+				const authorData = await this.fetchAuthorData(author, env);
+				if (!pluginData) {
+					return new Response('Plugin not found', { status: 404 });
+				}
+
+				pluginData.authorData = authorData;
+
+				const html = generatePluginHTML(pluginData);
+				response = new Response(html, {
+					headers: { 'Content-Type': 'text/html' },
+				});
+
+				// Cache the response
+				response.headers.set('Cache-Control', 'public, max-age=3600');
+				await cache.put(request, response.clone());
+			} catch (error) {
+				console.error('Error fetching plugin data:', error);
+				return new Response('Internal Server Error: ' + error.message, { status: 500 });
 			}
-	  
-			pluginData.authorData = authorData;
-	  
-			const html = generatePluginHTML(pluginData);
-			response = new Response(html, {
-			  headers: { 'Content-Type': 'text/html' },
-			});
-	  
-			// Cache the response
-			response.headers.set('Cache-Control', 'public, max-age=3600');
-			await cache.put(request, response.clone());
-		  } catch (error) {
-			console.error('Error fetching plugin data:', error);
-			return new Response('Internal Server Error: ' + error.message, { status: 500 });
-		  }
 		}
-	  
+
 		return response;
-	  },
-			
-	  async fetchPluginData(author, slug, env) {
+	},
+
+	async fetchPluginData(author, slug, env) {
 		const jsonKey = `${author}/${slug}/${slug}.json`;
 		const jsonObject = await env.PLUGIN_BUCKET.get(jsonKey);
-	  
-		if (!jsonObject) {
-		  console.error(`Plugin data not found for ${jsonKey}`);
-		  return null;
-		}
-	  
-		try {
-		  const text = await jsonObject.text();
-		  const parsed = JSON.parse(text);
-		  return Array.isArray(parsed) ? parsed[0] : parsed;
-		} catch (error) {
-		  console.error(`Error parsing JSON for ${jsonKey}:`, error);
-		  return null;
-		}
-	  },
 
-	  async handleGetAuthorDirectory(request, env) {
+		if (!jsonObject) {
+			console.error(`Plugin data not found for ${jsonKey}`);
+			return null;
+		}
+
+		try {
+			const text = await jsonObject.text();
+			const parsed = JSON.parse(text);
+			return Array.isArray(parsed) ? parsed[0] : parsed;
+		} catch (error) {
+			console.error(`Error parsing JSON for ${jsonKey}:`, error);
+			return null;
+		}
+	},
+
+	async handleGetAuthorDirectory(request, env) {
 		const url = new URL(request.url);
 		const pathParts = url.pathname.split('/').filter(part => part !== '');
-	  
+
 		if (pathParts.length !== 2 || pathParts[0] !== 'author') {
-		  return new Response('Invalid URL format', { status: 400 });
+			return new Response('Invalid URL format', { status: 400 });
 		}
-	  
+
 		const author = pathParts[1];
-	  
+
 		// Check cache first
 		const cacheKey = `author:${author}`;
 		const cache = caches.default;
 		let response = await cache.match(request);
-	  
-		if (!response) {
-		  try {
-			const authorData = await this.fetchAuthorPageData(author, env);
-			if (!authorData) {
-			  return new Response('Author not found', { status: 404 });
-			}
-	  
-			const html = generateAuthorHTML(authorData);
-			response = new Response(html, {
-			  headers: { 'Content-Type': 'text/html' },
-			});
 
-			// Cache the response
-			response.headers.set('Cache-Control', 'public, max-age=3600');
-			await cache.put(request, response.clone());
-		  } catch (error) {
-			console.error('Error fetching author data:', error);
-			return new Response('Internal Server Error: ' + error.message, { status: 500 });
-		  }
+		if (!response) {
+			try {
+				const authorData = await this.fetchAuthorPageData(author, env);
+				if (!authorData) {
+					return new Response('Author not found', { status: 404 });
+				}
+
+				const html = generateAuthorHTML(authorData);
+				response = new Response(html, {
+					headers: { 'Content-Type': 'text/html' },
+				});
+
+				// Cache the response
+				response.headers.set('Cache-Control', 'public, max-age=3600');
+				await cache.put(request, response.clone());
+			} catch (error) {
+				console.error('Error fetching author data:', error);
+				return new Response('Internal Server Error: ' + error.message, { status: 500 });
+			}
 		}
-	  
+
 		return response;
-	  },
-		  
-	  async fetchAuthorPageData(author, env) {
+	},
+
+	async fetchAuthorPageData(author, env) {
 		const authorInfoKey = `${author}/author_info.json`;
 		const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
-	  
+
 		if (!authorInfoObject) {
-		  console.error(`Author info not found for ${author}`);
-		  return null;
+			console.error(`Author info not found for ${author}`);
+			return null;
 		}
-	  
+
 		try {
-		  const authorInfoText = await authorInfoObject.text();
-		  const authorData = JSON.parse(authorInfoText);
-	  
-		  // Fetch and combine plugin data
-		  const pluginPrefix = `${author}/`;
-		  const pluginList = await env.PLUGIN_BUCKET.list({ prefix: pluginPrefix });
-	  
-		  const plugins = [];
-	  
-		  for (const item of pluginList.objects) {
-			const parts = item.key.split('/');
-			if (parts.length === 3 && parts[2] === `${parts[1]}.json`) {
-			  const jsonData = await env.PLUGIN_BUCKET.get(item.key);
-			  const pluginData = JSON.parse(await jsonData.text());
-	  
-			  // Preserve the original structure of the plugin data
-			  plugins.push({
-				slug: parts[1],
-				...pluginData[0]  // Spread the entire plugin data object
-			  });
+			const authorInfoText = await authorInfoObject.text();
+			const authorData = JSON.parse(authorInfoText);
+
+			// Fetch and combine plugin data
+			const pluginPrefix = `${author}/`;
+			const pluginList = await env.PLUGIN_BUCKET.list({ prefix: pluginPrefix });
+
+			const plugins = [];
+
+			for (const item of pluginList.objects) {
+				const parts = item.key.split('/');
+				if (parts.length === 3 && parts[2] === `${parts[1]}.json`) {
+					const jsonData = await env.PLUGIN_BUCKET.get(item.key);
+					const pluginData = JSON.parse(await jsonData.text());
+
+					// Preserve the original structure of the plugin data
+					plugins.push({
+						slug: parts[1],
+						...pluginData[0]  // Spread the entire plugin data object
+					});
+				}
 			}
-		  }
-	  
-		  // Replace the plugins array in authorData
-		  authorData.plugins = plugins;
-	  
-		  return authorData;
+
+			// Replace the plugins array in authorData
+			authorData.plugins = plugins;
+
+			return authorData;
 		} catch (error) {
-		  console.error(`Error processing data for ${authorInfoKey}:`, error);
-		  return null;
+			console.error(`Error processing data for ${authorInfoKey}:`, error);
+			return null;
 		}
-	  },
-		  
-	
+	},
+
+	// Add this new function to your worker class
+	async handleVersionCheck(request, env) {
+		try {
+			const url = new URL(request.url);
+			const author = url.searchParams.get('author');
+			const pluginName = url.searchParams.get('pluginName');
+			const newVersion = url.searchParams.get('newVersion');
+
+			if (!author || !pluginName || !newVersion) {
+				return new Response(JSON.stringify({ error: 'Missing required parameters' }), {
+					status: 400,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			const sanitizedPluginName = pluginName.replace(/\s/g, '-');
+			const jsonKey = `${author}/${sanitizedPluginName}/${sanitizedPluginName}.json`;
+			const jsonObject = await env.PLUGIN_BUCKET.get(jsonKey);
+
+			if (!jsonObject) {
+				return new Response(JSON.stringify({ isNew: true, canUpload: true }), {
+					status: 200,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			const jsonData = JSON.parse(await jsonObject.text());
+			const currentVersion = jsonData[0].version;
+
+			const isHigherVersion = this.compareVersions(newVersion, currentVersion);
+
+			return new Response(JSON.stringify({
+				isNew: false,
+				canUpload: isHigherVersion,
+				currentVersion: currentVersion
+			}), {
+				status: 200,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		} catch (error) {
+			console.error('Version check error:', error);
+			return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+
+	// Helper function to compare version strings
+	compareVersions(v1, v2) {
+		const parts1 = v1.split('.').map(Number);
+		const parts2 = v2.split('.').map(Number);
+
+		for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+			const part1 = parts1[i] || 0;
+			const part2 = parts2[i] || 0;
+
+			if (part1 > part2) return true;
+			if (part1 < part2) return false;
+		}
+
+		return false; // versions are equal
+	},
+
+	async handleBackupPlugin(request, env) {
+		try {
+			if (!this.authenticateRequest(request, env)) {
+				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			const { author, slug, version } = await request.json();
+
+			if (!author || !slug || !version) {
+				return new Response(JSON.stringify({ error: 'Missing required parameters' }), {
+					status: 400,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			const pluginFolder = `${author}/${slug}`;
+			const backupFolder = `${pluginFolder}/${version}`;
+
+			// Check if backup already exists
+			const existingBackup = await env.PLUGIN_BUCKET.list({ prefix: backupFolder });
+			if (existingBackup.objects.length > 0) {
+				return new Response(JSON.stringify({
+					success: false,
+					message: `Backup for version ${version} already exists`,
+				}), {
+					status: 200,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			// Files to backup
+			const filesToBackup = [
+				`${slug}.json`,
+				`${slug}.zip`,
+				'banner-1500x620.jpg',
+				'icon-256x256.jpg'
+			];
+
+			for (const file of filesToBackup) {
+				const sourceKey = `${pluginFolder}/${file}`;
+				const sourceObject = await env.PLUGIN_BUCKET.get(sourceKey);
+
+				if (sourceObject) {
+					const destinationKey = `${backupFolder}/${file}`;
+					await env.PLUGIN_BUCKET.put(destinationKey, sourceObject.body, sourceObject.httpMetadata);
+					console.log(`Backed up ${file} to ${destinationKey}`);
+				} else {
+					console.log(`File ${file} not found, skipping backup`);
+				}
+			}
+
+			// Update the main plugin metadata to reflect the current version
+			const metadataKey = `${pluginFolder}/${slug}.json`;
+			const metadataObject = await env.PLUGIN_BUCKET.get(metadataKey);
+			if (metadataObject) {
+				const metadata = JSON.parse(await metadataObject.text());
+				metadata[0].version = version;
+				await env.PLUGIN_BUCKET.put(metadataKey, JSON.stringify(metadata), {
+					httpMetadata: { contentType: 'application/json' },
+				});
+			}
+
+			return new Response(JSON.stringify({
+				success: true,
+				message: `Backup created for ${author}/${slug} version ${version}`,
+			}), {
+				status: 200,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+
+		} catch (error) {
+			console.error('Backup creation error:', error);
+			return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+
+
 	async fetch(request, env) {
 		const url = new URL(request.url);
 		const path = url.pathname;
@@ -725,13 +877,15 @@ async handleGetAuthorsList(env) {
 				if (path.startsWith('/directory/') && path.split('/').length === 4) {
 					return this.handleGetPluginDirectory(request, env);
 				} else if (path.startsWith('/author/') && path.split('/').length === 3) {
-					return this.handleGetAuthorDirectory(request, env);		  
+					return this.handleGetAuthorDirectory(request, env);
 				} else if (path === '/plugin-data') {
 					return this.handleGetPluginData(request, env);
 				} else if (path === '/author-data') {
 					return this.handleGetAuthorData(request, env);
 				} else if (path === '/authors-list') {
 					return this.handleGetAuthorsList(env);
+				} else if (path === '/version-check') {
+					return this.handleVersionCheck(request, env);
 				}
 				break;
 			case 'POST':
@@ -748,6 +902,8 @@ async handleGetAuthorsList(env) {
 						return this.handleFinalizeUpload(request, env);
 					case '/update-author-info':
 						return this.handleUpdateAuthorInfo(request, env);
+					case '/backup-plugin':
+						return this.handleBackupPlugin(request, env);
 					default:
 						break;
 				}

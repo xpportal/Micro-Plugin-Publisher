@@ -21,6 +21,8 @@ Before you begin, ensure you have the following:
 
 2. Follow the prompts to complete the setup process.
 
+3. The API key given at the end of setup is used to publish. This key should be in the root of your project directory as `API_KEY=<yourkey>` (and omit the `.env` file from version control) One workflow tip I would recommend is rolling the key on every publish so your stored credentials at .env are constantly out of sync after deploy. 
+
 ## Detailed Setup Instructions
 
 1. Ensure you're logged in to your Cloudflare account via Wrangler:
@@ -57,22 +59,83 @@ The `wrangler.toml` file in your project directory contains the configuration fo
 
 The Plugin Publishing System provides the following endpoints:
 
-- `GET /plugin-data`: Retrieve plugin data (now with caching)
-- `GET /author-data`: Retrieve author data (now with caching)
-- `GET /authors-list`: Get a list of all authors (now with caching)
+- `GET /plugin-data`: Retrieve plugin data (cached)
+- `GET /author-data`: Retrieve author data (cached)
+- `GET /authors-list`: Get a list of all authors (cached)
 - `GET /directory/{author}/{slug}`: Get the HTML page for a specific plugin (cached)
 - `GET /author/{author}`: Get the HTML page for a specific author (cached)
+- `GET /version-check` : Compares new version against author/slug/slug.json.
 - `POST /upload-chunk`: Upload a chunk of a plugin file
 - `POST /upload-json`: Upload JSON metadata for a plugin
 - `POST /finalize-upload`: Finalize a plugin upload
 - `POST /update-author-info`: Update author information
 - `POST /upload-asset`: Upload plugin assets (e.g., icons, banners)
+- `POST /backup-plugin` : Takes author/slug/version to create a backup of the currently live files.
 
 To use the `POST` endpoints, you'll need to include your API Secret in the `Authorization` header of your requests as a Bearer token.
 
 ## Caching
 
-The system now implements caching for all GET requests, improving performance and reducing load on the backend. Cached responses are automatically invalidated when relevant data is updated (e.g., when a new plugin is published or author information is updated).
+The API implements caching for all GET requests, improving performance and reducing load on the backend. Cached responses are automatically invalidated when relevant data is updated (e.g., when a new plugin is published or author information is updated, or when a `GET` request against plugin-data contains a secret).
+
+## Version Control and Backup
+
+The Plugin Publishing System includes a robust version checking and backup mechanism to ensure data integrity and prevent accidental overwrites.
+
+### Version Checking
+
+The system uses semantic versioning to manage plugin versions. Before any upload, a version check is performed:
+
+- Endpoint: `GET /version-check`
+- Query parameters: 
+  - `author`: The plugin author's identifier
+  - `pluginName`: The name of the plugin
+  - `newVersion`: The version being uploaded
+- Response: 
+  ```json
+  {
+    "isNew": boolean,
+    "canUpload": boolean,
+    "currentVersion": string
+  }
+  ```
+
+This endpoint determines if the new version can be uploaded based on the existing version in the system. It prevents uploading of older or identical versions.
+
+### Backup Creation
+
+Before updating an existing plugin, the system creates a backup of the current version:
+
+- Endpoint: `POST /backup-plugin`
+- Request body:
+  ```json
+  {
+    "author": string,
+    "slug": string,
+    "version": string
+  }
+  ```
+- Response: Success or failure message
+
+The backup process:
+1. Creates a new folder named with the current version number.
+2. Copies the current plugin files (JSON metadata, ZIP file, and assets) into this backup folder.
+3. Updates the main plugin metadata to reflect the current version.
+
+If a backup already exists for the given version, the endpoint returns a message indicating so without creating a duplicate backup.
+
+### Implementation Details
+
+- Backups are stored in the same R2 bucket as the main plugin files, organized by version.
+- The system uses a `compareVersions` function to ensure proper version ordering.
+- Version checking and backup creation are integral steps in the plugin upload process.
+
+These features ensure:
+- Data integrity by preventing accidental overwrites.
+- Version history maintenance for each plugin.
+- The ability to rollback to previous versions if needed.
+
+When using the API to upload or update plugins, always include the version information and follow the workflow of checking versions and creating backups before finalizing uploads.
 
 ## Customizing Author Pages
 
