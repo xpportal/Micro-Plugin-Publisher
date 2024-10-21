@@ -13,6 +13,13 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
 - Generate distribution URLs for your plugins
 - Enable automatic updates for end-users
 - Self-hosted API for plugin distribution
+- Auto Generated Plugin page and Author pages
+- Cache that adjusts when publishing new updates
+- Backup solution for versioining
+
+![Plugin Page](docs/assets/plugin-page.jpg)
+![Author Page](docs/assets/author-page.jpg)
+
 
 ## Installation
 
