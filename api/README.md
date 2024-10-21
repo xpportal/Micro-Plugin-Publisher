@@ -57,9 +57,11 @@ The `wrangler.toml` file in your project directory contains the configuration fo
 
 The Plugin Publishing System provides the following endpoints:
 
-- `GET /plugin-data`: Retrieve plugin data
-- `GET /author-data`: Retrieve author data
-- `GET /authors-list`: Get a list of all authors
+- `GET /plugin-data`: Retrieve plugin data (now with caching)
+- `GET /author-data`: Retrieve author data (now with caching)
+- `GET /authors-list`: Get a list of all authors (now with caching)
+- `GET /directory/{author}/{slug}`: Get the HTML page for a specific plugin (cached)
+- `GET /author/{author}`: Get the HTML page for a specific author (cached)
 - `POST /upload-chunk`: Upload a chunk of a plugin file
 - `POST /upload-json`: Upload JSON metadata for a plugin
 - `POST /finalize-upload`: Finalize a plugin upload
@@ -67,6 +69,62 @@ The Plugin Publishing System provides the following endpoints:
 - `POST /upload-asset`: Upload plugin assets (e.g., icons, banners)
 
 To use the `POST` endpoints, you'll need to include your API Secret in the `Authorization` header of your requests as a Bearer token.
+
+## Caching
+
+The system now implements caching for all GET requests, improving performance and reducing load on the backend. Cached responses are automatically invalidated when relevant data is updated (e.g., when a new plugin is published or author information is updated).
+
+## Customizing Author Pages
+
+Author pages can be customized by modifying the `generateAuthorHTML` function in the worker code. To customize your author page:
+
+1. Edit the `src/authorTemplate.js` file (or create it if it doesn't exist).
+2. Implement your custom HTML generation logic. For example:
+
+   ```javascript
+   export default function generateAuthorHTML(authorData) {
+     return `
+       <!DOCTYPE html>
+       <html lang="en">
+       <head>
+         <meta charset="UTF-8">
+         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+         <title>${authorData.username}'s Plugins</title>
+         <style>
+           /* Add your custom CSS here */
+         </style>
+       </head>
+       <body>
+         <header>
+           <h1>${authorData.username}</h1>
+           <img src="${authorData.avatar_url}" alt="${authorData.username}'s avatar">
+         </header>
+         <main>
+           <h2>About</h2>
+           <p>${authorData.bio || 'No bio provided.'}</p>
+           <h2>Plugins</h2>
+           <ul>
+             ${authorData.plugins.map(plugin => `
+               <li>
+                 <h3>${plugin.name}</h3>
+                 <p>${plugin.short_description}</p>
+                 <a href="/directory/${authorData.username}/${plugin.slug}">View Plugin</a>
+               </li>
+             `).join('')}
+           </ul>
+         </main>
+       </body>
+       </html>
+     `;
+   }
+   ```
+
+3. Deploy your changes using:
+   ```
+   npx wrangler deploy
+   ```
+
+Remember to clear the cache for your author page after making changes to see the updates immediately. You can bust the cache by hitting the upload plugin button in the Local Addon. In theory this directory should never be out of sync with the latest.
 
 ## Customization
 
@@ -96,6 +154,7 @@ To modify the worker's functionality:
 - The setup script assumes you have the necessary permissions to create resources and deploy workers in your Cloudflare account.
 - The script does not provide options for cleaning up resources if the setup fails midway.
 - Existing resources with the same names may be overwritten without warning.
+- Caching is set to a fixed duration (1 hour). Adjust the `max-age` value in the code if you need different caching behavior.
 
 ## Contributing
 
@@ -116,4 +175,4 @@ If you encounter issues or need assistance:
 
 ## Acknowledgments
 
-This project uses Cloudflare Workers and R2, powerful tools for building and deploying serverless applications and object storage.
+This project uses Cloudflare Workers and R2, powerful tools for building and deploying serverless applications and object storage. It also leverages Cloudflare's caching capabilities to improve performance and reduce load on the backend.
