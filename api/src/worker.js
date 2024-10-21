@@ -1,5 +1,7 @@
 // Import necessary dependencies
 import { Buffer } from 'buffer';
+import generatePluginHTML from './pluginTemplate';
+import generateAuthorHTML from './authorTemplate';
 
 // Define CORS headers
 const CORS_HEADERS = {
@@ -456,14 +458,15 @@ export default {
 		const plugins = [];
 
 		for (const item of list.objects) {
-			if (item.key.endsWith('.json') && !item.key.endsWith('author_info.json')) {
+			const parts = item.key.split('/');
+			if (parts.length === 3 && parts[2] === `${parts[1]}.json`) {
 				const jsonData = await env.PLUGIN_BUCKET.get(item.key);
 				const pluginData = JSON.parse(await jsonData.text());
 
 				console.log(`Plugin data for ${item.key}:`, pluginData);
 
 				plugins.push({
-					slug: item.key.split('/')[1].replace('.json', ''),
+					slug: parts[1],
 					name: pluginData[0].name,
 					short_description: pluginData[0].short_description,
 					icons: pluginData[0].icons,
@@ -478,6 +481,129 @@ export default {
 
 		return plugins;
 	},
+
+	  async handleGetPluginDirectory(request, env) {
+		const url = new URL(request.url);
+		const pathParts = url.pathname.split('/').filter(part => part !== '');
+	  
+		// Ensure we have exactly 3 parts: "directory", author, and slug
+		if (pathParts.length !== 3 || pathParts[0] !== 'directory') {
+		  return new Response('Invalid URL format', { status: 400 });
+		}
+	  
+		const author = pathParts[1];
+		const slug = pathParts[2];
+	  
+		try {
+		  const pluginData = await this.fetchPluginData(author, slug, env);
+		  const authorData = await this.fetchAuthorData(author, env);
+		  if (!pluginData) {
+			return new Response('Plugin not found', { status: 404 });
+		  }
+
+		  // append the author to the plugin data
+		  pluginData.authorData = authorData;
+	  
+		  const html = generatePluginHTML(pluginData);
+		  return new Response(html, {
+			headers: { 'Content-Type': 'text/html' },
+		  });
+		} catch (error) {
+		  console.error('Error fetching plugin data:', error);
+		  return new Response('Internal Server Error: ' + error.message, { status: 500 });
+		}
+	  },
+	  
+	  async fetchPluginData(author, slug, env) {
+		const jsonKey = `${author}/${slug}/${slug}.json`;
+		const jsonObject = await env.PLUGIN_BUCKET.get(jsonKey);
+	  
+		if (!jsonObject) {
+		  console.error(`Plugin data not found for ${jsonKey}`);
+		  return null;
+		}
+	  
+		try {
+		  const text = await jsonObject.text();
+		  const parsed = JSON.parse(text);
+		  return Array.isArray(parsed) ? parsed[0] : parsed;
+		} catch (error) {
+		  console.error(`Error parsing JSON for ${jsonKey}:`, error);
+		  return null;
+		}
+	  },
+
+	  async handleGetAuthorDirectory(request, env) {
+		const url = new URL(request.url);
+		const pathParts = url.pathname.split('/').filter(part => part !== '');
+	  
+		// Ensure we have exactly 2 parts: "author" and the author's username
+		if (pathParts.length !== 2 || pathParts[0] !== 'author') {
+		  return new Response('Invalid URL format', { status: 400 });
+		}
+	  
+		const author = pathParts[1];
+	  
+		try {
+		  const authorData = await this.fetchAuthorPageData(author, env);
+		  if (!authorData) {
+			return new Response('Author not found', { status: 404 });
+		  }
+		  
+		  const html = generateAuthorHTML(authorData);
+		  return new Response(html, {
+			headers: { 'Content-Type': 'text/html' },
+		  });
+		} catch (error) {
+		  console.error('Error fetching author data:', error);
+		  return new Response('Internal Server Error: ' + error.message, { status: 500 });
+		}
+	  },
+	
+	  async fetchAuthorPageData(author, env) {
+		const authorInfoKey = `${author}/author_info.json`;
+		const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
+	  
+		if (!authorInfoObject) {
+		  console.error(`Author info not found for ${author}`);
+		  return null;
+		}
+	  
+		try {
+		  const authorInfoText = await authorInfoObject.text();
+		  const authorData = JSON.parse(authorInfoText);
+	  
+		  // Fetch and combine plugin data
+		  const pluginPrefix = `${author}/`;
+		  const pluginList = await env.PLUGIN_BUCKET.list({ prefix: pluginPrefix });
+	  
+		  const plugins = [];
+	  
+		  for (const item of pluginList.objects) {
+			const parts = item.key.split('/');
+			if (parts.length === 3 && parts[2] === `${parts[1]}.json`) {
+			  const jsonData = await env.PLUGIN_BUCKET.get(item.key);
+			  const pluginData = JSON.parse(await jsonData.text());
+	  
+			  // Preserve the original structure of the plugin data
+			  plugins.push({
+				slug: parts[1],
+				...pluginData[0]  // Spread the entire plugin data object
+			  });
+			}
+		  }
+	  
+		  // Replace the plugins array in authorData
+		  authorData.plugins = plugins;
+	  
+		  return authorData;
+		} catch (error) {
+		  console.error(`Error processing data for ${authorInfoKey}:`, error);
+		  return null;
+		}
+	  },
+		  
+	
 	async fetch(request, env) {
 		const url = new URL(request.url);
 		const path = url.pathname;
@@ -500,7 +626,11 @@ export default {
 		// Route the request
 		switch (request.method) {
 			case 'GET':
-				if (path === '/plugin-data') {
+				if (path.startsWith('/directory/') && path.split('/').length === 4) {
+					return this.handleGetPluginDirectory(request, env);
+				} else if (path.startsWith('/author/') && path.split('/').length === 3) {
+					return this.handleGetAuthorDirectory(request, env);		  
+				} else if (path === '/plugin-data') {
 					return this.handleGetPluginData(request, env);
 				} else if (path === '/author-data') {
 					return this.handleGetAuthorData(request, env);
