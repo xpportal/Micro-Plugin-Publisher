@@ -6,11 +6,12 @@ import { IPC_EVENTS } from './constants';
 import path from 'path';
 import fs from 'fs-extra';
 import ScaffoldModal from './ScaffoldModal';
-
+import JSONEditorModal from './JSONEditorModal';
 
 const { ipcRenderer } = window.require('electron');
 
-const RepoPluginUploader = ({ site = {}, context }) => {
+const RepoPluginUploader = ( data ) => {
+	console.log("MY SITE", data);
 	const [uploadProgress, setUploadProgress] = useState({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
 	// @todo Add author pages.
 	// const [pluginPageUrl, setPluginPageUrl] = useState('');
@@ -19,15 +20,16 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 	const [apiUrl, setApiUrl] = useState('');
 	const [bucketUrl, setBucketUrl] = useState('');
 	const [jsonUpdateStatus, setJsonUpdateStatus] = useState('');
+	const [showJsonEditorModal, setShowJsonEditorModal] = useState(false);
 
 	const [showScaffoldModal, setShowScaffoldModal] = useState(false);
-	console.log("this is the site object", site);
+	console.log("this is the site object", data.site);
 	const [scaffoldData, setScaffoldData] = useState({
-		pluginName: '',
+		pluginName: data.site.name,
 		pluginDescription: '',
 		authorName: '',
 		authorSite: '',
-		site: site,
+		site: data.site.name,
 	});
 	const [scaffoldError, setScaffoldError] = useState('');
 
@@ -67,8 +69,10 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 	}, [scaffoldData]);
 
 	const getDefaultPaths = useCallback((siteName) => {
-		console.log('siteName:', siteName, 'site:', site);
-		const pluginName = siteName || 'xr-chess-block';
+		console.log('siteName:', siteName, 'site:', data.site);
+		// slugify the siteName
+		const slug = siteName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+		const pluginName = slug ?  slug : 'xr-chess-block';
 		return {
 			pluginName,
 			zipPath: `plugin-build/zip/${pluginName}.zip`,
@@ -79,11 +83,10 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 	}, []);
 
 	const [state, setState] = useState(() => {
-		console.log(site);
-		const defaults = getDefaultPaths(site.name);
+		const defaults = getDefaultPaths(data.site.name);
 		return {
-			siteId: site.id || '',
-			sitePath: site.path || '',
+			siteId: data.site.id || '',
+			sitePath: data.site.path || '',
 			userId: '', // New field for userId/organization
 			subDirectory: '',
 			pluginName: defaults.pluginName,
@@ -102,7 +105,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 
 	useEffect(() => {
 		const loadEnvironmentVariables = async () => {
-			const envPath = path.join(site.path, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName, '.env');
+			const envPath = path.join(data.site.path, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName, '.env');
 			if (fs.existsSync(envPath)) {
 				const envContent = await fs.readFile(envPath, 'utf8');
 				const envVars = dotenv.parse(envContent);
@@ -113,7 +116,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 		};
 
 		loadEnvironmentVariables();
-	}, [site.path, state.pluginName]);
+	}, [data.site.path, state.pluginName]);
 
 	const validateJson = useCallback(async () => {
 		if (!state.jsonFilePath || !state.pluginName) {
@@ -123,7 +126,8 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 		try {
 			const result = await ipcAsync(IPC_EVENTS.VALIDATE_JSON, {
 				pluginName: state.pluginName,
-				jsonPath: state.jsonFilePath
+				jsonPath: state.jsonFilePath,
+				sitePath: data.site.path
 			});
 			console.log('[RENDERER] Validation result:', result);
 			if (result.success) {
@@ -154,7 +158,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 
 	const updateJsonFile = async () => {
 		try {
-			let basePath = site.path;
+			let basePath = data.site.path;
 			if (!basePath) {
 				console.warn('site.path is undefined, using a fallback path');
 				basePath = process.env.HOME || process.env.USERPROFILE || '/';
@@ -253,7 +257,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 			setState(prevState => ({ ...prevState, uploadStatus: 'Preparing files...' }));
 			setUploadProgress({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
 
-			let basePath = site.path;
+			let basePath = data.site.path;
 			if (!basePath) {
 				console.warn('site.path is undefined, using a fallback path');
 				basePath = process.env.HOME || process.env.USERPROFILE || '/';
@@ -382,7 +386,7 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 			console.error('Upload error:', error);
 			setState(prevState => ({ ...prevState, uploadStatus: `Upload failed: ${error.message}` }));
 		}
-	}, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, site.path, apiKey, apiUrl, bucketUrl]);
+	}, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, data.site.path, apiKey, apiUrl, bucketUrl]);
 
 	return (
 		<div style={{ flex: '1', overflowY: 'auto', padding: '20px', maxWidth: '90%', margin: '0 auto' }}>
@@ -392,55 +396,78 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 			</div>
 
 			<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-				<BasicInput
-					label='Sub Directory'
-					helpText="Subdirectory for plugin upload (e.g., api/your-org/ or api/plugins/)"
-					placeholder='e.g., plugins, themes, some-org'
-					value={state.subDirectory}
-					onChange={(e) => handleInputChange(e, 'subDirectory')}
-				/>
-				<BasicInput
-					label="Plugin Name"
-					helpText="Match WordPress plugins directory folder name you wish to publish"
-					placeholder='e.g., my-awesome-plugin'
-					value={state.pluginName}
-					style={{ paddingBottom: '5.5px', marginBottom: '5.5px' }}
-					onChange={(e) => handleInputChange(e, 'pluginName')}
-				/>
-				<BasicInput
-					label="Zip File Path"
-					helpText="Suggested in plugin-build/zip directory"
-					placeholder='e.g., plugin-build/zip/my-plugin.zip'
-					value={state.zipFilePath}
-					onChange={(e) => handleInputChange(e, 'zipFilePath')}
-				/>
-				<BasicInput
-					label="JSON File Path"
-					helpText="Suggested in plugin-build/json directory"
-					placeholder='e.g., plugin-build/json/my-plugin.json'
-					value={state.jsonFilePath}
-					onChange={(e) => handleInputChange(e, 'jsonFilePath')}
-				/>
-				<BasicInput
-					label="Assets Path"
-					helpText="Define only the assets directory, the publisher will look inside for icon-256x256.jpg and banner-1500x620.jpg (icons, banner)"
-					placeholder='e.g., plugin-build/assets'
-					value={state.assetsPath}
-					onChange={(e) => handleInputChange(e, 'assetsPath')}
-				/>
-				<BasicInput
-					label="Author Info File Path"
-					helpText="JSON file with author information"
-					placeholder='e.g., plugin-build/json/author_info.json'
-					value={state.authorInfoPath}
-					onChange={(e) => handleInputChange(e, 'authorInfoPath')}
-				/>
+				<div>
+					<BasicInput
+						label='Sub Directory'
+						placeholder='e.g., plugins, themes, some-org'
+						value={state.subDirectory}
+						onChange={(e) => handleInputChange(e, 'subDirectory')}
+					/>
+					<p size="xs" style={{ gap: '3px', textAlign: 'center', color: '#878787'  }}>
+						Subdirectory for plugin upload (e.g., api/your-org/ or api/plugins/)
+					</p>
+				</div>
+				<div>
+					<BasicInput
+						label="Plugin Name"
+						placeholder='e.g., my-awesome-plugin'
+						value={state.pluginName}
+						onChange={(e) => handleInputChange(e, 'pluginName')}
+					/>
+					<p size="xs" style={{ gap: '3px', textAlign: 'center', color: '#878787' }}>
+						Match WordPress plugins directory folder name you wish to publish
+					</p>
+				</div>
+				<div>
+					<BasicInput
+						label="Zip File Path"
+						placeholder='e.g., plugin-build/zip/my-plugin.zip'
+						value={state.zipFilePath}
+						onChange={(e) => handleInputChange(e, 'zipFilePath')}
+					/>
+					<p size="xs" style={{ gap: '3px', textAlign: 'center', color: '#878787' }}>
+					Suggested in plugin-build/zip directory
+					</p>
+				</div>
+				<div>
+					<BasicInput
+						label="JSON File Path"
+						placeholder='e.g., plugin-build/json/my-plugin.json'
+						value={state.jsonFilePath}
+						onChange={(e) => handleInputChange(e, 'jsonFilePath')}
+					/>
+					<p size="xs" style={{ gap: '3px', textAlign: 'center',  color: '#878787'  }}>
+						Suggested in plugin-build/json directory
+					</p>
+				</div>
+				<div>
+					<BasicInput
+						label="Assets Path"
+						placeholder='e.g., plugin-build/assets'
+						value={state.assetsPath}
+						onChange={(e) => handleInputChange(e, 'assetsPath')}
+					/>
+					<p size="s" style={{ gap: '3px', textAlign: 'center', color: '#878787'  }}>
+						The Publisher will look inside this folder for icon-256x256.jpg and banner-1500x620.jpg
+					</p>
+				</div>
+				<div>
+					<BasicInput
+						label="Author Info File Path"
+						placeholder='e.g., plugin-build/json/author_info.json'
+						value={state.authorInfoPath}
+						onChange={(e) => handleInputChange(e, 'authorInfoPath')}
+					/>
+					<p size="s" style={{ gap: '3px', textAlign: 'center',  color: '#878787'  }}>
+						JSON file with author information
+					</p>
+				</div>
 			</div>
 
 			<Divider marginSize='m' />
 
 			<div style={{ display: 'flex', justifyContent: 'flex-start', gap: '10px', marginTop: '20px' }}>
-				<Button onClick={updateJsonFile}>Update JSON</Button>
+				<Button onClick={() => setShowJsonEditorModal(true)}>Edit JSON</Button>
 				<Button onClick={validateJson}>Validate JSON</Button>
 				{state.isJsonValid && <Button onClick={handleUpload}>Upload Plugin</Button>}
 			</div>
@@ -506,6 +533,19 @@ const RepoPluginUploader = ({ site = {}, context }) => {
 				isOpen={showScaffoldModal}
 				onRequestClose={() => setShowScaffoldModal(false)}
 				onSuccess={handleScaffoldSuccess}
+				site={data.site}
+			/>
+			<JSONEditorModal
+				isOpen={showJsonEditorModal}
+				onRequestClose={() => setShowJsonEditorModal(false)}
+				pluginName={state.pluginName}
+				sitePath={data.site.path}
+				onJsonUpdated={() => {
+					setState(prevState => ({
+					...prevState,
+					isJsonValid: false
+					}));
+				}}
 			/>
 		</div>
 	);

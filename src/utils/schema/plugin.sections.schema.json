@@ -1,0 +1,33 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "plugin.sections.schema.json",
+	"title": "WordPress Plugin Sections Schema",
+	"type": "object",
+	"properties": {
+	  "description": {
+		"type": "string",
+		"contentMediaType": "text/html"
+	  },
+	  "installation": {
+		"type": "string",
+		"contentMediaType": "text/html"
+	  },
+	  "changelog": {
+		"type": "string",
+		"contentMediaType": "text/html"
+	  },
+	  "faq": {
+		"type": "string",
+		"contentMediaType": "text/html"
+	  },
+	  "reviews": {
+		"type": "string",
+		"contentMediaType": "text/html"
+	  },
+	  "screenshots": {
+		"type": "string",
+		"contentMediaType": "text/html"
+	  }
+	},
+	"additionalProperties": false
+  }

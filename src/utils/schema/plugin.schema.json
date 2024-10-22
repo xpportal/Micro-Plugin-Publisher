@@ -1,0 +1,277 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "plugin.schema.json",
+	"title": "WordPress Plugin Metadata",
+	"description": "Schema for WordPress plugin metadata specification",
+	"type": "object",
+	"$defs": {
+		"uriString": {
+			"type": "string",
+			"format": "uri"
+		},
+		"versionString": {
+			"type": "string",
+			"pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+		}
+	},
+	"properties": {
+		"name": {
+			"type": "string",
+			"description": "The full name of the plugin as it appears in the WordPress plugin directory"
+		},
+		"slug": {
+			"type": "string",
+			"pattern": "^[a-z0-9-]+$",
+			"description": "A unique identifier for the plugin, using lowercase letters, numbers, and hyphens"
+		},
+		"version": {
+			"$ref": "#/$defs/versionString",
+			"description": "The current version number of the plugin"
+		},
+		"author": {
+			"type": "string",
+			"description": "The name or username of the plugin's primary author"
+		},
+		"author_profile": {
+			"$ref": "#/$defs/uriString",
+			"description": "URL to the author's profile page"
+		},
+		"requires": {
+			"$ref": "#/$defs/versionString",
+			"description": "The minimum WordPress version required"
+		},
+		"tested": {
+			"$ref": "#/$defs/versionString",
+			"description": "The highest WordPress version the plugin has been tested with"
+		},
+		"requires_php": {
+			"$ref": "#/$defs/versionString",
+			"description": "The minimum PHP version required"
+		},
+		"rating": {
+			"type": "number",
+			"minimum": 0,
+			"maximum": 100,
+			"description": "Average user rating (0-100)"
+		},
+		"ratings": {
+			"type": "object",
+			"properties": {
+				"1": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"2": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"3": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"4": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"5": {
+					"type": "integer",
+					"minimum": 0
+				}
+			},
+			"additionalProperties": false
+		},
+		"num_ratings": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"support_threads": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"support_threads_resolved": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"active_installs": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"downloaded": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"last_updated": {
+			"type": "string",
+			"pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{1,2}:\\d{2}[ap]m GMT$",
+			"description": "Last update date and time in WordPress format (YYYY-MM-DD H:MMam/pm GMT)"
+		},
+		"added": {
+			"type": "string",
+			"format": "date"
+		},
+		"homepage": {
+			"$ref": "#/$defs/uriString"
+		},
+		"short_description": {
+			"type": "string",
+			"maxLength": 150
+		},
+		"description": {
+			"type": "string",
+			"contentMediaType": "text/html"
+		},
+		"download_link": {
+			"$ref": "#/$defs/uriString"
+		},
+		"banners": {
+			"$ref": "./plugin.banners.schema.json"
+		},
+		"tags": {
+			"type": "object",
+			"patternProperties": {
+				"^tag[0-9]+$": {
+					"type": "string"
+				}
+			}
+		},
+		"donate_link": {
+			"$ref": "#/$defs/uriString"
+		},
+		"contributors": {
+			"$ref": "./plugin.contributors.schema.json"
+		},
+		"icons": {
+			"type": "object",
+			"properties": {
+				"1x": {
+					"$ref": "#/$defs/uriString"
+				},
+				"2x": {
+					"$ref": "#/$defs/uriString"
+				}
+			}
+		},
+		"source": {
+			"$ref": "./plugin.source.schema.json"
+		},
+		"business_model": {
+			"anyOf": [
+				{
+					"type": "string",
+					"enum": [
+						"commercial",
+						"community"
+					]
+				},
+				{
+					"type": "boolean",
+					"const": false
+				}
+			]
+		},
+		"commercial_support_url": {
+			"$ref": "#/$defs/uriString"
+		},
+		"support_url": {
+			"$ref": "#/$defs/uriString"
+		},
+		"preview_link": {
+			"$ref": "#/$defs/uriString"
+		},
+		"repository_url": {
+			"$ref": "#/$defs/uriString"
+		},
+		"requires_plugins": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"pattern": "^[a-z0-9-]+$"
+			},
+			"uniqueItems": true
+		},
+		"compatibility": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+			},
+			"uniqueItems": true
+		},
+		"screenshots": {
+			"type": [
+				"object",
+				"array"
+			],
+			"patternProperties": {
+				"^[0-9]+$": {
+					"type": "object",
+					"properties": {
+						"src": {
+							"$ref": "#/$defs/uriString"
+						},
+						"caption": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"src"
+					],
+					"additionalProperties": false
+				}
+			}
+		},
+		"sections": {
+			"$ref": "./plugin.sections.schema.json"
+		},
+		"versions": {
+			"type": "object",
+			"patternProperties": {
+				"^\\d+\\.\\d+(\\.\\d+)?(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$": {
+					"$ref": "#/$defs/uriString"
+				}
+			}
+		},
+		"upgrade_notice": {
+			"type": "object",
+			"patternProperties": {
+				"^\\d+\\.\\d+(\\.\\d+)?(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$": {
+					"type": "string"
+				}
+			}
+		},
+		"spec_meta": {
+			"type": "object",
+			"properties": {
+				"specification-version": {
+					"type": "string",
+					"pattern": "^\\d+\\.\\d+(\\.\\d+)?$",
+					"default": "1.0"
+				},
+				"specification-source": {
+					"type": "string",
+					"const": "aspiprepress"
+				}
+			},
+			"required": [
+				"specification-version",
+				"specification-source"
+			],
+			"additionalProperties": false
+		}
+	},
+	"required": [
+		"name",
+		"slug",
+		"version",
+		"author",
+		"requires",
+		"tested",
+		"requires_php",
+		"last_updated",
+		"added",
+		"short_description",
+		"description",
+		"download_link"
+	],
+	"additionalProperties": false
+}

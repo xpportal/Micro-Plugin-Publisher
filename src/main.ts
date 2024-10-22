@@ -61,11 +61,117 @@ export default function (context: LocalMain.AddonMainContext): void {
 		}
 	};
 
-	addIpcAsyncListener(IPC_EVENTS.VALIDATE_JSON, async ({ pluginName, jsonPath }) => {
-		logger.info(`Fetching JSON content for plugin: ${pluginName} and json path: ${jsonPath}`);
-		const sitePath = formatHomePath('~/Local Sites');
+	addIpcAsyncListener(IPC_EVENTS.LOAD_PLUGIN_JSON, async ({ pluginName, sitePath }) => {
 		try {
-			const jsonFilePath = path.join(sitePath, pluginName, 'app', 'public', 'wp-content', 'plugins', pluginName, jsonPath);
+		  const formattedSitePath = formatHomePath(sitePath);
+	  
+		  const jsonFilePath = path.join(
+			formattedSitePath,
+			'app',
+			'public',
+			'wp-content',
+			'plugins',
+			pluginName,
+			'plugin-build',
+			'json',
+			`${pluginName}.json`
+		  );
+	  
+		  logger.info(`Loading JSON file from ${jsonFilePath}`);
+		  let content;
+		  let isNewFromTemplate = false;
+	  
+		  // Check if target file exists
+		  if (!fs.existsSync(jsonFilePath)) {
+			logger.info(`JSON file not found at ${jsonFilePath}, loading example template`);
+			
+			// Get the example template path
+			const exampleJsonPath = path.join(__dirname, '..', 'examples', 'example-plugin-info.json');
+			logger.info(`Example JSON file path: ${exampleJsonPath}`);
+			
+			if (!fs.existsSync(exampleJsonPath)) {
+			  throw new Error('Example template JSON file not found');
+			}
+	  
+			// Read the example template
+			content = await fs.readJson(exampleJsonPath);
+			
+			// Customize the template with the plugin name
+			if (Array.isArray(content) && content.length > 0) {
+			  content[0] = {
+				...content[0],
+				name: pluginName,
+				slug: pluginName.toLowerCase(),
+				version: '0.1.0',
+				download_link: '',
+				last_updated: new Date().toISOString(),
+				added: new Date().toISOString().split('T')[0],
+			  };
+			}
+			
+			isNewFromTemplate = true;
+		  } else {
+			// Read existing JSON file
+			content = await fs.readJson(jsonFilePath);
+			logger.info(`Loaded existing JSON file from ${jsonFilePath}`);
+		  }
+		  
+		  return { 
+			success: true,
+			content: JSON.stringify(content, null, 2),
+			isNewFromTemplate: isNewFromTemplate,
+			targetPath: jsonFilePath // Send back the target path for reference
+		  };
+		} catch (error) {
+		  logger.error(`Error handling JSON file: ${error}`);
+		  return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error)
+		  };
+		}
+	  });
+	  
+	  // Update the WRITE_PLUGIN_JSON handler to ensure the directory exists before writing:
+	  addIpcAsyncListener(IPC_EVENTS.WRITE_PLUGIN_JSON, async ({ pluginName, sitePath, jsonContent }) => {
+		try {
+		  const formattedSitePath = formatHomePath(sitePath);
+		  
+		  const jsonFilePath = path.join(
+			formattedSitePath,
+			'app',
+			'public',
+			'wp-content',
+			'plugins',
+			pluginName,
+			'plugin-build',
+			'json',
+			`${pluginName}.json`
+		  );
+	  
+		  logger.info(`Writing JSON file to ${jsonFilePath}`);
+	  
+		  // Ensure the directory exists before writing
+		  await fs.ensureDir(path.dirname(jsonFilePath));
+	  
+		  // Write the JSON content
+		  await fs.writeJson(jsonFilePath, jsonContent, { spaces: 2 });
+		  logger.info('Successfully wrote JSON file');
+	  
+		  return { success: true };
+		} catch (error) {
+		  logger.error(`Error writing JSON file: ${error}`);
+		  return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error)
+		  };
+		}
+	  });
+		
+	addIpcAsyncListener(IPC_EVENTS.VALIDATE_JSON, async ({ pluginName, jsonPath, sitePath }) => {
+		logger.info(`Fetching JSON content for plugin: ${pluginName} and json path: ${jsonPath}`);
+		const formattedSitePath = formatHomePath(sitePath);
+		try {
+			const jsonFilePath = path.join( formattedSitePath, 'app', 'public', 'wp-content', 'plugins', pluginName, jsonPath);
 
 			if (!fs.existsSync(jsonFilePath)) {
 				throw new Error(`JSON file not found: ${jsonFilePath}`);

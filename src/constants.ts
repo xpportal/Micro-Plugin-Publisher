@@ -12,6 +12,9 @@ export const IPC_EVENTS = {
 	UPLOAD_PLUGIN_ASSETS: 'repo-plugin-uploader:upload-plugin-assets',
 	UPDATE_JSON_FILE: 'repo-plugin-uploader:update-json-file',
 	SCAFFOLD_PLUGIN: 'repo-plugin-uploader:scaffold-plugin',
+	GET_SITE_NAME: 'repo-plugin-uploader:get-site-name',
+	LOAD_PLUGIN_JSON: 'repo-plugin-uploader:load-plugin-json',
+	WRITE_PLUGIN_JSON: 'repo-plugin-uploader:write-plugin-json',
 };
 
 export const STORE_KEYS = {

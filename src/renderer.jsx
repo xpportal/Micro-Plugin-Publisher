@@ -21,17 +21,23 @@ export default async function (context) {
       href={stylesheetPath}
     />
   ));
+  const stylesheetPath = path.resolve(__dirname, '../style.css');
 
-  hooks.addFilter('siteInfoToolsItem', (menu) => {
+  hooks.addFilter('siteInfoToolsItem', (menu, { routeChildrenProps }) => {
     console.log('[RENDERER] Adding JSON Validator & Uploader to site info tools');
+	console.log("Siteeeeeeeee", routeChildrenProps.site);
+	const site = routeChildrenProps.site;
     return [
       ...menu,
       {
         menuItem: 'Plugin Publisher',
         path: `/${addonID}`,
         render: ({ match }) => {
-          console.log('[RENDERER] Rendering JSONValidatorUploader component');
-          return <RepoPluginUploader site={match.params.siteID ? context.sites[match.params.siteID] : {}} />;
+          console.log('[RENDERER] MAAAAATCH', match);
+          return <RepoPluginUploader
+					site={site}
+					match={match}
+		  		 />;
         },
       },
     ];

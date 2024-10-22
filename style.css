@@ -1,0 +1,13 @@
+.leftJSON {
+	text-align: left !important;
+	/* // preserve line width and dont wrap. allow scroll to view the length of the line. */
+	white-space: nowrap;
+	overflow-x: auto;
+}
+
+	/* // style to scroll to make sense on darkmode background*/
+	.leftJSON::-webkit-scrollbar {
+		width: 5px;
+		height: 8px;
+		background-color: #aaa; /* or add it to the track */
+	}

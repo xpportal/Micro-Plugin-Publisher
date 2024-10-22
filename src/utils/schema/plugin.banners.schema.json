@@ -1,0 +1,19 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "plugin.banners.schema.json",
+	"title": "WordPress Plugin Banner Schema",
+	"type": "object",
+	"properties": {
+	  "high": {
+		"type": "string",
+		"format": "uri",
+		"description": "URL to high-resolution banner image (1544x500)"
+	  },
+	  "low": {
+		"type": "string",
+		"format": "uri",
+		"description": "URL to low-resolution banner image (772x250)"
+	  }
+	},
+	"additionalProperties": false
+  }

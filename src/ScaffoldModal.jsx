@@ -3,10 +3,11 @@ import { ipcAsync } from '@getflywheel/local/renderer';
 import { Button, Title, Text, BasicInput, Spinner, FlyModal } from '@getflywheel/local-components';
 import { IPC_EVENTS } from './constants';
 
-const ScaffoldModal = ({ isOpen, onRequestClose, onSuccess }) => {
+const ScaffoldModal = ({ isOpen, onRequestClose, onSuccess, site }) => {
+	console.log("scaffold site", site);
   const [scaffoldData, setScaffoldData] = useState({
-    pluginName: '',
-    pluginSlug: '',
+    pluginName: site.name,
+    pluginSlug: site?.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
     pluginDescription: '',
     pluginVersion: '0.1',
     pluginUri: '',
@@ -139,7 +140,7 @@ const ScaffoldModal = ({ isOpen, onRequestClose, onSuccess }) => {
           />
           <BasicInput
             label="License"
-            placeholder="Enter license"
+            placeholder="Enter license type"
             value={scaffoldData.license}
             onChange={(e) => handleScaffoldInputChange(e, 'license')}
             aria-label="License input"

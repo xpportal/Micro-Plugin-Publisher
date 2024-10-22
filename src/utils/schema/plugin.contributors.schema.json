@@ -1,0 +1,31 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "plugin.contributors.schema.json",
+	"title": "WordPress Plugin Contributor Schema",
+	"type": "object",
+	"patternProperties": {
+		"^[a-zA-Z0-9_-]+$": {
+			"type": "object",
+			"properties": {
+				"profile": {
+					"type": "string",
+					"format": "uri"
+				},
+				"avatar": {
+					"type": "string",
+					"format": "uri"
+				},
+				"display_name": {
+					"type": "string"
+				}
+			},
+			"required": [
+				"profile",
+				"avatar",
+				"display_name"
+			],
+			"additionalProperties": false
+		}
+	},
+	"additionalProperties": false
+}
