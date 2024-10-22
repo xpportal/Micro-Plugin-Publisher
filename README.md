@@ -92,6 +92,10 @@ The addon looks for your files in the Local by Flywheel site structure:
 1. Enter plugin information into the input fields.
 2. Update the JSON file using the "Update JSON" button.
 3. Validate the JSON file.
+	Micro Plugin Publisher allows you to open a modal and directly edit your plugin info json with schema validated to prevent saving bad or invalid data.
+
+![json validation errors](docs/assets/json-validation-errors.jpg)
+
 4. If validation is successful, upload the plugin.
 5. The addon will provide you with URLs for the uploaded zip file and metadata.
 
