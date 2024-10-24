@@ -4,7 +4,6 @@ import { Button, Title, Text, BasicInput, Spinner, FlyModal } from '@getflywheel
 import { IPC_EVENTS } from './constants';
 
 const ScaffoldModal = ({ isOpen, onRequestClose, onSuccess, site }) => {
-	console.log("scaffold site", site);
   const [scaffoldData, setScaffoldData] = useState({
     pluginName: site.name,
     pluginSlug: site?.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),

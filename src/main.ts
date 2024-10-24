@@ -498,6 +498,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 	addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFile, jsonFile, metadata, assetsPath, authorData, apiKey, apiUrl }) => {
 		try {
+			logger.info(`Uploading plugin ${pluginName} for user ${userId} with apiKey ${apiKey}`);
 			// Step 0: Check if the plugin exists and compare versions if it does
 			let pluginDataResponse;
 			try {
@@ -516,8 +517,8 @@ export default function (context: LocalMain.AddonMainContext): void {
 				}
 			}
 
-			const newVersion = metadata[0].version;
-			let isNewPlugin = false;
+			const newVersion = metadata.version;
+			let isNewPlugin = true;
 
 			if (pluginDataResponse.error === 'Plugin not found') {
 				logger.info('New plugin detected, bypassing version check');
@@ -569,6 +570,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 			// Step 2: Upload ZIP file in chunks
 			const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
 			const totalChunks = Math.ceil(zipFile.length / CHUNK_SIZE);
+			logger.info(`Uploading ZIP file in ${totalChunks} chunks, ${zipFile.length} bytes total`);
 
 			for (let chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
 				const start = (chunkNumber - 1) * CHUNK_SIZE;
@@ -687,6 +689,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 	// Helper function to compare version strings
 	function compareVersions(v1, v2) {
+		logger.info(`Comparing versions: ${v1} and ${v2}`);
 		const parts1 = v1.split('.').map(Number);
 		const parts2 = v2.split('.').map(Number);
 

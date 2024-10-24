@@ -7,6 +7,18 @@ import path from 'path';
 import fs from 'fs-extra';
 import ScaffoldModal from './ScaffoldModal';
 import JSONEditorModal from './JSONEditorModal';
+import dotenv from 'dotenv';
+import os from 'os';
+
+// Add this utility function at the top level of your component
+const expandHomeDir = (filepath) => {
+    if (!filepath) return filepath;
+    if (filepath.startsWith('~/') || filepath === '~') {
+        return filepath.replace('~', os.homedir());
+    }
+    return filepath;
+};
+
 
 const { ipcRenderer } = window.require('electron');
 
@@ -23,7 +35,7 @@ const RepoPluginUploader = ( data ) => {
 	const [showJsonEditorModal, setShowJsonEditorModal] = useState(false);
 
 	const [showScaffoldModal, setShowScaffoldModal] = useState(false);
-	console.log("this is the site object", data.site);
+	// console.log("this is the site object", data.site);
 	const [scaffoldData, setScaffoldData] = useState({
 		pluginName: data.site.name,
 		pluginDescription: '',
@@ -103,20 +115,54 @@ const RepoPluginUploader = ( data ) => {
 		};
 	});
 
-	useEffect(() => {
-		const loadEnvironmentVariables = async () => {
-			const envPath = path.join(data.site.path, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName, '.env');
-			if (fs.existsSync(envPath)) {
-				const envContent = await fs.readFile(envPath, 'utf8');
-				const envVars = dotenv.parse(envContent);
-				setApiKey(envVars.API_KEY);
-				setApiUrl(envVars.PLUGIN_API_URL);
-				setBucketUrl(envVars.BUCKET_URL);
-			}
-		};
+    useEffect(() => {
+        const loadEnvironmentVariables = async () => {
+            try {
+                // Normalize path and handle spaces correctly
+                const expandedPath = expandHomeDir(data.site.path);
+                const normalizedPath = path.normalize(expandedPath);
+                
+                const pluginPath = path.join(
+                    normalizedPath,
+                    'app',
+                    'public',
+                    'wp-content',
+                    'plugins',
+                    state.pluginName
+                );
+                const envPath = path.join(pluginPath, '.env');
+                
+                console.log("Checking .env path:", envPath);
+                
+                if (await fs.pathExists(envPath)) {
+                    console.log(".env file exists");
+                    const envContent = await fs.readFile(envPath, 'utf8');
+                    console.log("ENV content:", envContent);
+                    
+                    // Parse the env content manually to handle potential formatting issues
+                    const envVars = {};
+                    envContent.split('\n').forEach(line => {
+                        const [key, ...valueParts] = line.split('=');
+                        if (key && valueParts.length > 0) {
+                            envVars[key.trim()] = valueParts.join('=').trim();
+                        }
+                    });
+                    
+                    console.log("Parsed ENV vars:", envVars);
+                    
+                    if (envVars.API_KEY) setApiKey(envVars.API_KEY);
+                    if (envVars.PLUGIN_API_URL) setApiUrl(envVars.PLUGIN_API_URL);
+                    if (envVars.BUCKET_URL) setBucketUrl(envVars.BUCKET_URL);
+                } else {
+                    console.error(".env file not found at:", envPath);
+                }
+            } catch (error) {
+                console.error("Error loading environment variables:", error);
+            }
+        };
 
-		loadEnvironmentVariables();
-	}, [data.site.path, state.pluginName]);
+        loadEnvironmentVariables();
+    }, [data.site.path, state.pluginName]);
 
 	const validateJson = useCallback(async () => {
 		if (!state.jsonFilePath || !state.pluginName) {
@@ -163,8 +209,10 @@ const RepoPluginUploader = ( data ) => {
 				console.warn('site.path is undefined, using a fallback path');
 				basePath = process.env.HOME || process.env.USERPROFILE || '/';
 			}
+			const normalizedPath = formatHomePath(basePath);
+			
 
-			const pluginPath = path.join(basePath, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName);
+			const pluginPath = path.join(normalizedPath, 'app', 'public', 'wp-content', 'plugins', state.pluginName);
 
 			// use the env from the pluginPath/.env file
 			const envPath = path.join(pluginPath, '.env');
@@ -252,73 +300,72 @@ const RepoPluginUploader = ( data ) => {
 		};
 	}, []);
 
-	const handleUpload = useCallback(async () => {
-		try {
-			setState(prevState => ({ ...prevState, uploadStatus: 'Preparing files...' }));
-			setUploadProgress({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
+    const handleUpload = useCallback(async () => {
+        try {
+            setState(prevState => ({ ...prevState, uploadStatus: 'Preparing files...' }));
+            setUploadProgress({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
 
-			let basePath = data.site.path;
-			if (!basePath) {
-				console.warn('site.path is undefined, using a fallback path');
-				basePath = process.env.HOME || process.env.USERPROFILE || '/';
-			}
+            // Verify environment variables
+            if (!apiKey || !apiUrl || !bucketUrl) {
+                throw new Error('Required environment variables are missing. Please check your .env file.');
+            }
 
-			const pluginPath = path.join(basePath, 'Local Sites', state.pluginName, 'app', 'public', 'wp-content', 'plugins', state.pluginName);
-
-			// use the env from the pluginPath/.env file
-			const envPath = path.join(pluginPath, '.env');
-			console.log('Reading .env file:', envPath);
-			if (fs.existsSync(envPath)) {
-				const env = fs.readFileSync(envPath, 'utf8');
-				const envLines = env.split('\n');
-				envLines.forEach((line) => {
-					const [key, value] = line.split('=');
-					process.env[key] = value;
-				});
-			}
-
-			const { PLUGIN_API_URL, API_KEY, BUCKET_URL } = process.env;
-
-
-			if (!PLUGIN_API_URL || !API_KEY || !BUCKET_URL) {
-				throw new Error('PLUGIN_API_URL API_KEY or BUCKET_URL is not set in the environment variables');
-			}
-
+            // Expand and normalize the base path
+            const expandedPath = expandHomeDir(data.site.path);
+            const normalizedPath = path.normalize(expandedPath);
+			console.log('Normalized path:', normalizedPath);
+	
+			const pluginPath = path.join(normalizedPath, 'app', 'public', 'wp-content', 'plugins', state.pluginName);
+			
+			// Construct full paths
 			const fullZipPath = path.join(pluginPath, state.zipFilePath);
 			const fullJsonPath = path.join(pluginPath, state.jsonFilePath);
 			const fullAssetsPath = path.join(pluginPath, state.assetsPath);
 			const fullAuthorInfoPath = path.join(pluginPath, state.authorInfoPath);
-
-			console.log('ZIP file path:', fullZipPath);
-			console.log('JSON file path:', fullJsonPath);
-			console.log('Assets path:', fullAssetsPath);
-			console.log('Author Info file path:', fullAuthorInfoPath);
-
-			if (!state.zipFilePath || !state.jsonFilePath || !state.assetsPath || !state.authorInfoPath) {
-				throw new Error('ZIP, JSON, assets, or author info file path is missing');
+	
+			// Validate all required paths exist
+			const pathsToCheck = [
+				{ path: fullZipPath, name: 'ZIP file' },
+				{ path: fullJsonPath, name: 'JSON file' },
+				{ path: fullAssetsPath, name: 'Assets directory' },
+				{ path: fullAuthorInfoPath, name: 'Author info file' }
+			];
+	
+			for (const { path: pathToCheck, name } of pathsToCheck) {
+				const exists = await fs.pathExists(pathToCheck);
+				if (!exists) {
+					throw new Error(`${name} not found at: ${pathToCheck}`);
+				}
 			}
-
+	
+			console.log('File paths validated:', {
+				zipPath: fullZipPath,
+				jsonPath: fullJsonPath,
+				assetsPath: fullAssetsPath,
+				authorInfoPath: fullAuthorInfoPath
+			});
+	
 			// Read and upload ZIP file
 			setState(prevState => ({ ...prevState, uploadStatus: 'Reading ZIP file...' }));
 			const zipFileResult = await ipcAsync(IPC_EVENTS.READ_ZIP_FILE, { zipPath: fullZipPath });
 			if (!zipFileResult.success) {
 				throw new Error(zipFileResult.error || 'Failed to read ZIP file');
 			}
-
+	
 			// Read and upload JSON file
 			setState(prevState => ({ ...prevState, uploadStatus: 'Reading JSON file...' }));
 			const jsonFileResult = await ipcAsync(IPC_EVENTS.READ_JSON_FILE, { jsonPath: fullJsonPath });
 			if (!jsonFileResult.success) {
 				throw new Error(jsonFileResult.error || 'Failed to read JSON file');
 			}
-
+	
 			// Read author info file
 			setState(prevState => ({ ...prevState, uploadStatus: 'Reading author info file...' }));
 			const authorInfoResult = await ipcAsync(IPC_EVENTS.READ_JSON_FILE, { jsonPath: fullAuthorInfoPath });
 			if (!authorInfoResult.success) {
 				throw new Error(authorInfoResult.error || 'Failed to read author info file');
 			}
-
+	
 			// Parse author info
 			let authorData;
 			try {
@@ -327,7 +374,7 @@ const RepoPluginUploader = ( data ) => {
 				console.error('Error parsing author info JSON content:', error);
 				throw new Error('Failed to parse author info JSON content');
 			}
-
+	
 			// Prepare metadata
 			setState(prevState => ({ ...prevState, uploadStatus: 'Preparing metadata...' }));
 			let metadata;
@@ -340,37 +387,31 @@ const RepoPluginUploader = ( data ) => {
 				console.error('Error parsing JSON content:', error);
 				throw new Error('Failed to parse JSON content');
 			}
-
-			// Upload plugin (ZIP, JSON, and author info)
+	
+			// Upload plugin
 			setState(prevState => ({ ...prevState, uploadStatus: 'Uploading plugin...' }));
-			console.log("key and url", API_KEY, PLUGIN_API_URL);
-
-			// Convert authorData to a JSON string before sending
+			console.log('Using API credentials:', { apiKey, apiUrl, bucketUrl });
+			console.log("zip", zipFileResult);
 			const uploadResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN, {
 				userId: state.subDirectory,
 				pluginName: state.pluginName,
 				zipFile: zipFileResult.content,
 				jsonFile: jsonFileResult.content,
 				assetsPath: fullAssetsPath,
-				authorData: JSON.stringify(authorData), // Convert to JSON string
+				authorData: JSON.stringify(authorData),
 				metadata: metadata,
-				apiKey: API_KEY,
-				apiUrl: PLUGIN_API_URL,
-				BUCKET_URL: BUCKET_URL
+				apiKey: apiKey,
+				apiUrl: apiUrl,
+				bucketUrl: bucketUrl
 			});
-
+	
 			if (!uploadResult.success) {
 				throw new Error(uploadResult.error || 'Failed to upload plugin');
 			}
-
-			// Extract userId from assetsUrl
-			let userId = state.subDirectory; // Use the new userId field
+	
+			let userId = state.subDirectory;
 			console.log('Using userId:', userId);
-
-			//   const publishedPluginPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}/${state.pluginName}` : '';
-			//   const publishedAuthorPageUrl = userId ? `https://app.xr.foundation/plugins/${userId}` : '';
-			//   setPluginPageUrl(publishedPluginPageUrl);
-			//   setAuthorPageUrl(publishedAuthorPageUrl);
+	
 			setState(prevState => ({
 				...prevState,
 				uploadStatus: 'Upload successful',
@@ -381,12 +422,17 @@ const RepoPluginUploader = ( data ) => {
 				pluginName: uploadResult.pluginName
 			}));
 			setUploadProgress(prev => ({ ...prev, step: 5, totalSteps: 5 }));
-
+	
 		} catch (error) {
 			console.error('Upload error:', error);
-			setState(prevState => ({ ...prevState, uploadStatus: `Upload failed: ${error.message}` }));
+			setState(prevState => ({ 
+				...prevState, 
+				uploadStatus: `Upload failed: ${error.message}` 
+			}));
 		}
-	}, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, state.jsonFilePath, state.assetsPath, state.authorInfoPath, data.site.path, apiKey, apiUrl, bucketUrl]);
+	}, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, 
+		state.jsonFilePath, state.assetsPath, state.authorInfoPath, 
+		data.site.path, apiKey, apiUrl, bucketUrl]);
 
 	return (
 		<div style={{ flex: '1', overflowY: 'auto', padding: '20px', maxWidth: '90%', margin: '0 auto' }}>

@@ -514,7 +514,7 @@ export default {
 	// Helper function to fetch author data
 	async fetchAuthorData(author, env) {
 		const authorInfoKey = `${author}/author_info.json`;
-
+		console.log(`Fetching author data for ${author} ${authorInfoKey}`);
 		try {
 			const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
 			if (!authorInfoObject) {
@@ -545,7 +545,7 @@ export default {
 				console.log(`Plugin data for ${item.key}:`, pluginData);
 
 				plugins.push({
-					slug: parts[1],
+					slug: pluginData[0].slug,
 					name: pluginData[0].name,
 					short_description: pluginData[0].short_description,
 					icons: pluginData[0].icons,
@@ -564,46 +564,80 @@ export default {
 	async handleGetPluginDirectory(request, env) {
 		const url = new URL(request.url);
 		const pathParts = url.pathname.split('/').filter(part => part !== '');
-
+	  
 		if (pathParts.length !== 3 || pathParts[0] !== 'directory') {
-			return new Response('Invalid URL format', { status: 400 });
+		  return new Response('Invalid URL format', { status: 400 });
 		}
-
+	  
 		const author = pathParts[1];
 		const slug = pathParts[2];
-
+	  
 		// Check cache first
 		const cacheKey = `plugin:${author}:${slug}`;
 		const cache = caches.default;
 		let response = await cache.match(request);
-
+	  
 		if (!response) {
-			try {
-				const pluginData = await this.fetchPluginData(author, slug, env);
-				const authorData = await this.fetchAuthorData(author, env);
-				if (!pluginData) {
-					return new Response('Plugin not found', { status: 404 });
-				}
-
-				pluginData.authorData = authorData;
-
-				const html = generatePluginHTML(pluginData);
-				response = new Response(html, {
-					headers: { 'Content-Type': 'text/html' },
-				});
-
-				// Cache the response
-				response.headers.set('Cache-Control', 'public, max-age=3600');
-				await cache.put(request, response.clone());
-			} catch (error) {
-				console.error('Error fetching plugin data:', error);
-				return new Response('Internal Server Error: ' + error.message, { status: 500 });
+		  try {
+			const pluginData = await this.fetchPluginData(author, slug, env);
+			const authorData = await this.fetchAuthorData(author, env);
+			
+			if (!pluginData) {
+			  return new Response('Plugin not found', { status: 404 });
 			}
+	  
+			pluginData.authorData = authorData;
+			response = await generatePluginHTML(pluginData);
+	  
+			// Cache the response
+			response.headers.set('Cache-Control', 'public, max-age=3600');
+			await cache.put(request, response.clone());
+		  } catch (error) {
+			console.error('Error generating plugin page:', error);
+			return new Response('Internal Server Error', { status: 500 });
+		  }
 		}
-
+	  
 		return response;
-	},
-
+	  },
+	  
+	  async handleGetAuthorDirectory(request, env) {
+		const url = new URL(request.url);
+		const pathParts = url.pathname.split('/').filter(part => part !== '');
+	  
+		if (pathParts.length !== 2 || pathParts[0] !== 'author') {
+		  return new Response('Invalid URL format', { status: 400 });
+		}
+	  
+		const author = pathParts[1];
+	  
+		// Check cache first
+		const cacheKey = `author:${author}`;
+		const cache = caches.default;
+		let response = await cache.match(request);
+	  
+		if (!response) {
+		  try {
+			console.log('Author data:', author);
+			const authorData = await this.fetchAuthorPageData(author, env);
+			if (!authorData) {
+			  return new Response('Author not found', { status: 404 });
+			}
+			console.log(JSON.stringify(authorData));
+			response = await generateAuthorHTML(authorData);
+	  
+			// Cache the response
+			response.headers.set('Cache-Control', 'public, max-age=3600');
+			await cache.put(request, response.clone());
+		  } catch (error) {
+			console.error('Error generating author page:', error);
+			return new Response('Internal Server Error', { status: 500 });
+		  }
+		}
+	  
+		return response;
+	  },
+	  
 	async fetchPluginData(author, slug, env) {
 		const jsonKey = `${author}/${slug}/${slug}.json`;
 		const jsonObject = await env.PLUGIN_BUCKET.get(jsonKey);
@@ -623,49 +657,11 @@ export default {
 		}
 	},
 
-	async handleGetAuthorDirectory(request, env) {
-		const url = new URL(request.url);
-		const pathParts = url.pathname.split('/').filter(part => part !== '');
-
-		if (pathParts.length !== 2 || pathParts[0] !== 'author') {
-			return new Response('Invalid URL format', { status: 400 });
-		}
-
-		const author = pathParts[1];
-
-		// Check cache first
-		const cacheKey = `author:${author}`;
-		const cache = caches.default;
-		let response = await cache.match(request);
-
-		if (!response) {
-			try {
-				const authorData = await this.fetchAuthorPageData(author, env);
-				if (!authorData) {
-					return new Response('Author not found', { status: 404 });
-				}
-
-				const html = generateAuthorHTML(authorData);
-				response = new Response(html, {
-					headers: { 'Content-Type': 'text/html' },
-				});
-
-				// Cache the response
-				response.headers.set('Cache-Control', 'public, max-age=3600');
-				await cache.put(request, response.clone());
-			} catch (error) {
-				console.error('Error fetching author data:', error);
-				return new Response('Internal Server Error: ' + error.message, { status: 500 });
-			}
-		}
-
-		return response;
-	},
 
 	async fetchAuthorPageData(author, env) {
 		const authorInfoKey = `${author}/author_info.json`;
 		const authorInfoObject = await env.PLUGIN_BUCKET.get(authorInfoKey);
-
+		// stringify and log the authorInfoObject
 		if (!authorInfoObject) {
 			console.error(`Author info not found for ${author}`);
 			return null;
@@ -673,6 +669,7 @@ export default {
 
 		try {
 			const authorInfoText = await authorInfoObject.text();
+
 			const authorData = JSON.parse(authorInfoText);
 
 			// Fetch and combine plugin data
@@ -682,15 +679,15 @@ export default {
 			const plugins = [];
 
 			for (const item of pluginList.objects) {
+				// log 
 				const parts = item.key.split('/');
 				if (parts.length === 3 && parts[2] === `${parts[1]}.json`) {
 					const jsonData = await env.PLUGIN_BUCKET.get(item.key);
 					const pluginData = JSON.parse(await jsonData.text());
-
+					console.log(`Plugin data for ${item.key}:`, pluginData);
 					// Preserve the original structure of the plugin data
 					plugins.push({
-						slug: parts[1],
-						...pluginData[0]  // Spread the entire plugin data object
+						...pluginData[0],
 					});
 				}
 			}
