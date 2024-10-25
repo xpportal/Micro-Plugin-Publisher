@@ -29,5 +29,8 @@
 		"contentMediaType": "text/html"
 	  }
 	},
+	"required": [
+		"description"
+	],
 	"additionalProperties": false
   }

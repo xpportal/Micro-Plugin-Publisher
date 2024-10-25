@@ -63,115 +63,115 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 	addIpcAsyncListener(IPC_EVENTS.LOAD_PLUGIN_JSON, async ({ pluginName, sitePath }) => {
 		try {
-		  const formattedSitePath = formatHomePath(sitePath);
-	  
-		  const jsonFilePath = path.join(
-			formattedSitePath,
-			'app',
-			'public',
-			'wp-content',
-			'plugins',
-			pluginName,
-			'plugin-build',
-			'json',
-			`${pluginName}.json`
-		  );
-	  
-		  logger.info(`Loading JSON file from ${jsonFilePath}`);
-		  let content;
-		  let isNewFromTemplate = false;
-	  
-		  // Check if target file exists
-		  if (!fs.existsSync(jsonFilePath)) {
-			logger.info(`JSON file not found at ${jsonFilePath}, loading example template`);
-			
-			// Get the example template path
-			const exampleJsonPath = path.join(__dirname, '..', 'examples', 'example-plugin-info.json');
-			logger.info(`Example JSON file path: ${exampleJsonPath}`);
-			
-			if (!fs.existsSync(exampleJsonPath)) {
-			  throw new Error('Example template JSON file not found');
+			const formattedSitePath = formatHomePath(sitePath);
+
+			const jsonFilePath = path.join(
+				formattedSitePath,
+				'app',
+				'public',
+				'wp-content',
+				'plugins',
+				pluginName,
+				'plugin-build',
+				'json',
+				`${pluginName}.json`
+			);
+
+			logger.info(`Loading JSON file from ${jsonFilePath}`);
+			let content;
+			let isNewFromTemplate = false;
+
+			// Check if target file exists
+			if (!fs.existsSync(jsonFilePath)) {
+				logger.info(`JSON file not found at ${jsonFilePath}, loading example template`);
+
+				// Get the example template path
+				const exampleJsonPath = path.join(__dirname, '..', 'examples', 'example-plugin-info.json');
+				logger.info(`Example JSON file path: ${exampleJsonPath}`);
+
+				if (!fs.existsSync(exampleJsonPath)) {
+					throw new Error('Example template JSON file not found');
+				}
+
+				// Read the example template
+				content = await fs.readJson(exampleJsonPath);
+
+				// Customize the template with the plugin name
+				if (Array.isArray(content) && content.length > 0) {
+					content[0] = {
+						...content[0],
+						name: pluginName,
+						slug: pluginName.toLowerCase(),
+						version: '0.1.0',
+						download_link: '',
+						last_updated: new Date().toISOString(),
+						added: new Date().toISOString().split('T')[0],
+					};
+				}
+
+				isNewFromTemplate = true;
+			} else {
+				// Read existing JSON file
+				content = await fs.readJson(jsonFilePath);
+				logger.info(`Loaded existing JSON file from ${jsonFilePath}`);
 			}
-	  
-			// Read the example template
-			content = await fs.readJson(exampleJsonPath);
-			
-			// Customize the template with the plugin name
-			if (Array.isArray(content) && content.length > 0) {
-			  content[0] = {
-				...content[0],
-				name: pluginName,
-				slug: pluginName.toLowerCase(),
-				version: '0.1.0',
-				download_link: '',
-				last_updated: new Date().toISOString(),
-				added: new Date().toISOString().split('T')[0],
-			  };
-			}
-			
-			isNewFromTemplate = true;
-		  } else {
-			// Read existing JSON file
-			content = await fs.readJson(jsonFilePath);
-			logger.info(`Loaded existing JSON file from ${jsonFilePath}`);
-		  }
-		  
-		  return { 
-			success: true,
-			content: JSON.stringify(content, null, 2),
-			isNewFromTemplate: isNewFromTemplate,
-			targetPath: jsonFilePath // Send back the target path for reference
-		  };
+
+			return {
+				success: true,
+				content: JSON.stringify(content, null, 2),
+				isNewFromTemplate: isNewFromTemplate,
+				targetPath: jsonFilePath // Send back the target path for reference
+			};
 		} catch (error) {
-		  logger.error(`Error handling JSON file: ${error}`);
-		  return {
-			success: false,
-			error: error instanceof Error ? error.message : String(error)
-		  };
+			logger.error(`Error handling JSON file: ${error}`);
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : String(error)
+			};
 		}
-	  });
-	  
-	  // Update the WRITE_PLUGIN_JSON handler to ensure the directory exists before writing:
-	  addIpcAsyncListener(IPC_EVENTS.WRITE_PLUGIN_JSON, async ({ pluginName, sitePath, jsonContent }) => {
+	});
+
+	// Update the WRITE_PLUGIN_JSON handler to ensure the directory exists before writing:
+	addIpcAsyncListener(IPC_EVENTS.WRITE_PLUGIN_JSON, async ({ pluginName, sitePath, jsonContent }) => {
 		try {
-		  const formattedSitePath = formatHomePath(sitePath);
-		  
-		  const jsonFilePath = path.join(
-			formattedSitePath,
-			'app',
-			'public',
-			'wp-content',
-			'plugins',
-			pluginName,
-			'plugin-build',
-			'json',
-			`${pluginName}.json`
-		  );
-	  
-		  logger.info(`Writing JSON file to ${jsonFilePath}`);
-	  
-		  // Ensure the directory exists before writing
-		  await fs.ensureDir(path.dirname(jsonFilePath));
-	  
-		  // Write the JSON content
-		  await fs.writeJson(jsonFilePath, jsonContent, { spaces: 2 });
-		  logger.info('Successfully wrote JSON file');
-	  
-		  return { success: true };
+			const formattedSitePath = formatHomePath(sitePath);
+
+			const jsonFilePath = path.join(
+				formattedSitePath,
+				'app',
+				'public',
+				'wp-content',
+				'plugins',
+				pluginName,
+				'plugin-build',
+				'json',
+				`${pluginName}.json`
+			);
+
+			logger.info(`Writing JSON file to ${jsonFilePath}`);
+
+			// Ensure the directory exists before writing
+			await fs.ensureDir(path.dirname(jsonFilePath));
+
+			// Write the JSON content
+			await fs.writeJson(jsonFilePath, jsonContent, { spaces: 2 });
+			logger.info('Successfully wrote JSON file');
+
+			return { success: true };
 		} catch (error) {
-		  logger.error(`Error writing JSON file: ${error}`);
-		  return {
-			success: false,
-			error: error instanceof Error ? error.message : String(error)
-		  };
+			logger.error(`Error writing JSON file: ${error}`);
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : String(error)
+			};
 		}
-	  });
-		
+	});
+
 	addIpcAsyncListener(IPC_EVENTS.VALIDATE_JSON, async ({ pluginName, jsonPath, sitePath }) => {
 		logger.info(`Fetching JSON content for plugin: ${pluginName} and json path: ${jsonPath}`);
 		const formattedSitePath = formatHomePath(sitePath);
 		try {
-			const jsonFilePath = path.join( formattedSitePath, 'app', 'public', 'wp-content', 'plugins', pluginName, jsonPath);
+			const jsonFilePath = path.join(formattedSitePath, 'app', 'public', 'wp-content', 'plugins', pluginName, jsonPath);
 
 			if (!fs.existsSync(jsonFilePath)) {
 				throw new Error(`JSON file not found: ${jsonFilePath}`);
@@ -496,9 +496,10 @@ export default function (context: LocalMain.AddonMainContext): void {
 		}
 	});
 
-	addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFile, jsonFile, metadata, assetsPath, authorData, apiKey, apiUrl }) => {
+	// In the uploadPlugin IPC handler, modify the version check logic:
+	addIpcAsyncListener(IPC_EVENTS.UPLOAD_PLUGIN, async ({ userId, pluginName, zipFile, jsonFile, metadata, assetsPath, authorData, apiKey, apiUrl, forceUpload }) => {
 		try {
-			logger.info(`Uploading plugin ${pluginName} for user ${userId} with apiKey ${apiKey}`);
+			logger.info(`Uploading plugin ${pluginName} for user ${userId} with apiKey ${apiKey}, force upload: ${forceUpload}`);
 			// Step 0: Check if the plugin exists and compare versions if it does
 			let pluginDataResponse;
 			try {
@@ -525,23 +526,25 @@ export default function (context: LocalMain.AddonMainContext): void {
 				isNewPlugin = true;
 			} else {
 				const existingVersion = pluginDataResponse[0].version;
-				if (!compareVersions(newVersion, existingVersion)) {
-					throw new Error(`New version (${newVersion}) must be higher than the existing version (${existingVersion})`);
+				if (!forceUpload && !compareVersions(newVersion, existingVersion)) {
+					throw new Error(`New version (${newVersion}) must be higher than the existing version (${existingVersion}). Use force upload to override this check. Currently is ${forceUpload}`);
 				}
-				logger.info(`New version (${newVersion}) is higher than existing version (${existingVersion}), creating backup and proceeding with upload`);
+				logger.info(`Version check passed - New version: ${newVersion}, Existing version: ${existingVersion}, Force upload: ${forceUpload}`);
 
-				// Create backup of the existing version
-				const backupResponse = await makeApiCall(`${apiUrl}/backup-plugin`, 'POST', {
-					author: userId,
-					slug: pluginName,
-					version: existingVersion,
-					apiKey,
-				});
+				if (!forceUpload) {
+					// Create backup of the existing version
+					const backupResponse = await makeApiCall(`${apiUrl}/backup-plugin`, 'POST', {
+						author: userId,
+						slug: pluginName,
+						version: existingVersion,
+						apiKey,
+					});
 
-				if (!backupResponse.success) {
-					throw new Error(`Failed to create backup: ${backupResponse.error || 'Unknown error'}`);
+					if (!backupResponse.success) {
+						throw new Error(`Failed to create backup: ${backupResponse.error || 'Unknown error'}`);
+					}
+					logger.info(`Backup created for version ${existingVersion}`);
 				}
-				logger.info(`Backup created for version ${existingVersion}`);
 			}
 
 			Electron.BrowserWindow.getAllWindows()[0].webContents.send('upload-progress', {

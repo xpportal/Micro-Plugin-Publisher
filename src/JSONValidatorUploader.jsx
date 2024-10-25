@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import * as Local from '@getflywheel/local';
 import { ipcAsync } from '@getflywheel/local/renderer';
-import { Button, Title, Text, BasicInput, Divider, CopyInput, ProgressBar, FlyModal, FlyTooltip } from '@getflywheel/local-components';
+import { Button, Title, Text, BasicInput, Divider, CopyInput, ProgressBar, FlyModal, FlyTooltip, Checkbox } from '@getflywheel/local-components';
 import { IPC_EVENTS } from './constants';
 import path from 'path';
 import fs from 'fs-extra';
@@ -33,6 +33,7 @@ const RepoPluginUploader = ( data ) => {
 	const [bucketUrl, setBucketUrl] = useState('');
 	const [jsonUpdateStatus, setJsonUpdateStatus] = useState('');
 	const [showJsonEditorModal, setShowJsonEditorModal] = useState(false);
+	const [forceUpload, setForceUpload] = useState(false);
 
 	const [showScaffoldModal, setShowScaffoldModal] = useState(false);
 	// console.log("this is the site object", data.site);
@@ -392,19 +393,21 @@ const RepoPluginUploader = ( data ) => {
 			setState(prevState => ({ ...prevState, uploadStatus: 'Uploading plugin...' }));
 			console.log('Using API credentials:', { apiKey, apiUrl, bucketUrl });
 			console.log("zip", zipFileResult);
-			const uploadResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN, {
-				userId: state.subDirectory,
-				pluginName: state.pluginName,
-				zipFile: zipFileResult.content,
-				jsonFile: jsonFileResult.content,
-				assetsPath: fullAssetsPath,
-				authorData: JSON.stringify(authorData),
-				metadata: metadata,
-				apiKey: apiKey,
-				apiUrl: apiUrl,
-				bucketUrl: bucketUrl
-			});
-	
+            // Upload plugin with forceUpload parameter
+            const uploadResult = await ipcAsync(IPC_EVENTS.UPLOAD_PLUGIN, {
+                userId: state.subDirectory,
+                pluginName: state.pluginName,
+                zipFile: zipFileResult.content,
+                jsonFile: jsonFileResult.content,
+                assetsPath: fullAssetsPath,
+                authorData: JSON.stringify(authorData),
+                metadata: metadata,
+                apiKey: apiKey,
+                apiUrl: apiUrl,
+                bucketUrl: bucketUrl,
+                forceUpload: forceUpload
+            });
+
 			if (!uploadResult.success) {
 				throw new Error(uploadResult.error || 'Failed to upload plugin');
 			}
@@ -424,15 +427,15 @@ const RepoPluginUploader = ( data ) => {
 			setUploadProgress(prev => ({ ...prev, step: 5, totalSteps: 5 }));
 	
 		} catch (error) {
-			console.error('Upload error:', error);
-			setState(prevState => ({ 
-				...prevState, 
-				uploadStatus: `Upload failed: ${error.message}` 
-			}));
-		}
-	}, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, 
-		state.jsonFilePath, state.assetsPath, state.authorInfoPath, 
-		data.site.path, apiKey, apiUrl, bucketUrl]);
+            console.error('Upload error:', error);
+            setState(prevState => ({ 
+                ...prevState, 
+                uploadStatus: `Upload failed: ${error.message}` 
+            }));
+        }
+    }, [state.userId, state.subDirectory, state.pluginName, state.zipFilePath, 
+        state.jsonFilePath, state.assetsPath, state.authorInfoPath, 
+        data.site.path, apiKey, apiUrl, bucketUrl, forceUpload]);
 
 	return (
 		<div style={{ flex: '1', overflowY: 'auto', padding: '20px', maxWidth: '90%', margin: '0 auto' }}>
@@ -515,7 +518,36 @@ const RepoPluginUploader = ( data ) => {
 			<div style={{ display: 'flex', justifyContent: 'flex-start', gap: '10px', marginTop: '20px' }}>
 				<Button onClick={() => setShowJsonEditorModal(true)}>Edit JSON</Button>
 				<Button onClick={validateJson}>Validate JSON</Button>
-				{state.isJsonValid && <Button onClick={handleUpload}>Upload Plugin</Button>}
+				{state.isJsonValid && (
+					<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+						<Button onClick={handleUpload}>Upload Plugin</Button>
+						<div style={{ 
+							display: 'flex', 
+							alignItems: 'center', 
+							padding: '0 10px',
+							backgroundColor: '#2a1515',
+							borderRadius: '4px',
+							marginLeft: '10px'
+						}}>
+							<Checkbox
+								checked={forceUpload}
+								onChange={() => setForceUpload(!forceUpload)}
+								id="force-upload"
+							/>
+							<label 
+								htmlFor="force-upload"
+								style={{ 
+									color: '#ff6b6b',
+									fontSize: '14px',
+									cursor: 'pointer',
+									marginLeft: '5px'
+								}}
+							>
+								Force Upload
+							</label>
+						</div>
+					</div>
+				)}
 			</div>
 
 			<Divider marginSize='m' />

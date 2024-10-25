@@ -63,29 +63,31 @@ class SecureHtmlService {
 
 	createScriptTransformer(nonce) {
 		return {
-			element: (element) => {
-				if (element.tagName === 'script') {
-					// Allow any script from jsdelivr
-					const src = element.getAttribute('src');
-					if (src && src.includes('cdn.jsdelivr.net')) {
-						element.setAttribute('nonce', nonce);
-						return;
-					}
-
-					// Allow specific inline scripts
-					const content = element.innerHTML;
-					if (content && content.includes('feather.replace();')) {
-						element.setAttribute('nonce', nonce);
-						return;
-					}
-
-					// Remove other scripts
-					element.remove();
-				}
+		  element: (element) => {
+			if (element.tagName === 'script') {
+			  // Allow scripts from allowed domains
+			  const src = element.getAttribute('src');
+			  if (src && (
+				src.includes('cdn.jsdelivr.net') || 
+				src.includes('playground.wordpress.net')
+			  )) {
+				element.setAttribute('nonce', nonce);
+				return;
+			  }
+	
+			  // Allow our playground initialization script
+			  if (element.hasAttribute('data-playground-init')) {
+				element.setAttribute('nonce', nonce);
+				return;
+			  }
+	
+			  // Remove other scripts
+			  element.remove();
 			}
+		  }
 		};
 	}
-
+	  
 	createLinkTransformer() {
 		return {
 			element: (element) => {
@@ -126,12 +128,11 @@ class SecureHtmlService {
 
 	sanitizePluginData(plugin) {
 		if (!plugin) return null;
-
+		console.log(JSON.stringify(plugin));
 		return {
 			name: this.sanitizeText(plugin.name),
 			slug: this.sanitizeText(plugin.slug),
 			short_description: this.sanitizeText(plugin.short_description),
-			description: this.sanitizeHtml(plugin.description),
 			version: this.sanitizeText(plugin.version),
 			download_link: this.sanitizeUrl(plugin.download_link),
 			support_url: this.sanitizeUrl(plugin.support_url),
@@ -141,15 +142,19 @@ class SecureHtmlService {
 			rating: parseFloat(plugin.rating) || 0,
 			active_installs: parseInt(plugin.active_installs) || 0,
 			last_updated: this.sanitizeText(plugin.last_updated),
-			author: this.sanitizeText(plugin.author),
-			banner: this.sanitizeUrl(plugin.banner || '/images/default-banner.jpg'),
+			author: this.sanitizeText(plugin.author),		
+			banners: {
+				"high": this.sanitizeUrl(plugin.banners?.high || '/images/default-banner.jpg'),
+				"low": this.sanitizeUrl(plugin.banners?.low || '/images/default-banner.jpg')
+			},
 			icons: {
 				'1x': this.sanitizeUrl(plugin.icons?.['1x'] || '/images/default-icon.jpg'),
 				'2x': this.sanitizeUrl(plugin.icons?.['2x'] || '/images/default-icon.jpg')
 			},
 			sections: plugin.sections ? {
 				installation: this.sanitizeText(plugin.sections.installation),
-				faq: this.sanitizeHtml(plugin.sections.faq)
+				faq: this.sanitizeHtml(plugin.sections.faq),
+				description: this.sanitizeHtml(plugin.sections.description)
 			} : {},
 			authorData: plugin.authorData ? this.sanitizeAuthorData(plugin.authorData) : null
 		};

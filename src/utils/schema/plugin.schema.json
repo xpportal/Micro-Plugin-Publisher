@@ -116,10 +116,6 @@
 			"type": "string",
 			"maxLength": 150
 		},
-		"description": {
-			"type": "string",
-			"contentMediaType": "text/html"
-		},
 		"download_link": {
 			"$ref": "#/$defs/uriString"
 		},
@@ -242,19 +238,19 @@
 		"spec_meta": {
 			"type": "object",
 			"properties": {
-				"specification-version": {
+				"specification_version": {
 					"type": "string",
 					"pattern": "^\\d+\\.\\d+(\\.\\d+)?$",
 					"default": "1.0"
 				},
-				"specification-source": {
+				"specification_source": {
 					"type": "string",
-					"const": "aspiprepress"
+					"const": "aspirepress"
 				}
 			},
 			"required": [
-				"specification-version",
-				"specification-source"
+				"specification_version",
+				"specification_source"
 			],
 			"additionalProperties": false
 		}
@@ -270,8 +266,8 @@
 		"last_updated",
 		"added",
 		"short_description",
-		"description",
-		"download_link"
+		"download_link",
+		"sections"
 	],
 	"additionalProperties": false
 }

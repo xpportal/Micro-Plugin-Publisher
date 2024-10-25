@@ -4,7 +4,7 @@ export default async function generatePluginHTML(pluginData) {
   const secureHtmlService = createSecureHtmlService();
   // Sanitize the input data
   const safePlugin = secureHtmlService.sanitizePluginData(pluginData);
-  
+  console.log("datertots", JSON.stringify(pluginData));
   if (!safePlugin) {
     return new Response('Invalid plugin data', { status: 400 });
   }
@@ -29,7 +29,7 @@ export default async function generatePluginHTML(pluginData) {
         <div class="bg-gradient-to-r from-green-500 to-purple-600 pt-16">
           <div class="container mx-auto px-2 max-h-[620px]">
             <div class="relative max-w-[1300px] mx-auto shadow-lg rounded-t-2xl overflow-hidden">
-              <img src="${safePlugin.banner}" alt="${safePlugin.name} banner" class="h-auto max-h-[620px] justify-center object-cover w-full">
+              <img src="${safePlugin.banners.high}" alt="${safePlugin.name} banner" class="h-auto max-h-[620px] justify-center object-cover w-full">
             </div>
           </div>
         </div>
@@ -44,7 +44,7 @@ export default async function generatePluginHTML(pluginData) {
                 </div>
               </div>
               <div class="bg-[#191919] rounded-3xl p-2 mb-2">
-                <div class="text-md leading-8">${safePlugin.description}</div>
+                <div class="text-md leading-8">${safePlugin.sections?.description}</div>
               </div>
               ${safePlugin.sections?.installation ? `
                 <h3 class="text-2xl font-bold mb-4">Installation</h3>
@@ -76,11 +76,11 @@ export default async function generatePluginHTML(pluginData) {
                   ` : ''}
                   </div>
                   <div class="flex items-center">
-                    <span class="mr-2 text-green-400">↓</span>
+                    <span class="mr-2 text-purple-600">↓</span>
                     <span class="text-s">${safePlugin.active_installs}+ downloads</span>
                   </div>
                 </div>
-                <a href="${safePlugin.download_link}" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-3xl mb-4 flex items-center justify-center">
+                <a href="${safePlugin.download_link}" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-3xl mb-4 flex items-center justify-center">
                   Download v${safePlugin.version}
                 </a>
                 <div class="text-sm text-gray-200">
@@ -98,7 +98,7 @@ export default async function generatePluginHTML(pluginData) {
                     <img src="${safePlugin.authorData.avatar_url}" alt="${safePlugin.author}" class="w-16 h-16 mr-4 rounded-full">
                     <div>
                       <p class="font-bold">${safePlugin.author}</p>
-                      <a href="/author/${safePlugin.author}" class="text-green-400 hover:underline">View Profile</a>
+                      <a href="/author/${safePlugin.author}" class="text-purple-400 hover:underline">View Profile</a>
                     </div>
                   </div>
                   <a href="${safePlugin.support_url}" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-3xl block text-center">
@@ -113,8 +113,8 @@ export default async function generatePluginHTML(pluginData) {
           <div class="container mx-auto px-4 text-center text-gray-200">
             <p>&copy; ${new Date().getFullYear()} Your Footer Text</p>
             <p>
-              <a href="/terms" class="text-green-400 hover:underline">Terms of Service</a> | 
-              <a href="/privacy" class="text-green-400 hover:underline">Privacy Policy</a>
+              <a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
+              <a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a>
             </p>
           </div>
         </div>
