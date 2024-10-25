@@ -36,6 +36,127 @@ export default {
 		return true;
 	},
 
+	async handleDownload(request, env) {
+		try {
+			const url = new URL(request.url);
+			const author = url.searchParams.get('author');
+			const slug = url.searchParams.get('slug');
+
+			if (!author || !slug) {
+				return new Response(JSON.stringify({ error: 'Missing author or slug parameter' }), {
+					status: 400,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			// Check rate limit
+			const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Client-IP');
+			const rateLimitKey = `ratelimit:${clientIP}:${author}:${slug}`;
+			const currentTime = Date.now();
+
+			// Get current rate limit data
+			const rateLimitData = await env.DOWNLOAD_RATELIMIT.get(rateLimitKey);
+			if (rateLimitData) {
+				const { timestamp, count } = JSON.parse(rateLimitData);
+
+				// If last download was within 1 hour and count exceeds 5
+				if (currentTime - timestamp < 3600000 && count >= 5) {
+					return new Response(JSON.stringify({
+						error: 'Rate limit exceeded. Please try again later.'
+					}), {
+						status: 429,
+						headers: {
+							...CORS_HEADERS,
+							'Content-Type': 'application/json',
+							'Retry-After': '3600'
+						},
+					});
+				}
+
+				// Update rate limit count if within same hour
+				if (currentTime - timestamp < 3600000) {
+					await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
+						timestamp,
+						count: count + 1
+					}), { expirationTtl: 3600 });
+				} else {
+					// Reset count if more than an hour has passed
+					await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
+						timestamp: currentTime,
+						count: 1
+					}), { expirationTtl: 3600 });
+				}
+			} else {
+				// First download for this IP/plugin combination
+				await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
+					timestamp: currentTime,
+					count: 1
+				}), { expirationTtl: 3600 });
+			}
+
+			// Increment download counter
+			const downloadKey = `downloads:${author}:${slug}`;
+			const currentCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
+			await env.DOWNLOAD_COUNTS.put(downloadKey, (currentCount + 1).toString());
+
+			// Get the plugin zip file
+			const zipKey = `${author}/${slug}/${slug}.zip`;
+			const zipObject = await env.PLUGIN_BUCKET.get(zipKey);
+
+			if (!zipObject) {
+				return new Response(JSON.stringify({ error: 'Plugin not found' }), {
+					status: 404,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			// Return the zip file
+			return new Response(zipObject.body, {
+				status: 200,
+				headers: {
+					...CORS_HEADERS,
+					'Content-Type': 'application/zip',
+					'Content-Disposition': `attachment; filename="${slug}.zip"`,
+				},
+			});
+		} catch (error) {
+			console.error('Download error:', error);
+			return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+
+	async getDownloadCount(request, env) {
+		try {
+			const url = new URL(request.url);
+			const author = url.searchParams.get('author');
+			const slug = url.searchParams.get('slug');
+
+			if (!author || !slug) {
+				return new Response(JSON.stringify({ error: 'Missing author or slug parameter' }), {
+					status: 400,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			const downloadKey = `downloads:${author}:${slug}`;
+			const count = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
+
+			return new Response(JSON.stringify({ downloads: count }), {
+				status: 200,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		} catch (error) {
+			console.error('Get download count error:', error);
+			return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+
 	// Handle GET /plugin-data
 	// Handle GET /plugin-data
 	async handleGetPluginData(request, env) {
@@ -564,80 +685,80 @@ export default {
 	async handleGetPluginDirectory(request, env) {
 		const url = new URL(request.url);
 		const pathParts = url.pathname.split('/').filter(part => part !== '');
-	  
+
 		if (pathParts.length !== 3 || pathParts[0] !== 'directory') {
-		  return new Response('Invalid URL format', { status: 400 });
+			return new Response('Invalid URL format', { status: 400 });
 		}
-	  
+
 		const author = pathParts[1];
 		const slug = pathParts[2];
-	  
+
 		// Check cache first
 		const cacheKey = `plugin:${author}:${slug}`;
 		const cache = caches.default;
 		let response = await cache.match(request);
-	  
+
 		if (!response) {
-		  try {
-			const pluginData = await this.fetchPluginData(author, slug, env);
-			const authorData = await this.fetchAuthorData(author, env);
-			
-			if (!pluginData) {
-			  return new Response('Plugin not found', { status: 404 });
+			try {
+				const pluginData = await this.fetchPluginData(author, slug, env);
+				const authorData = await this.fetchAuthorData(author, env);
+
+				if (!pluginData) {
+					return new Response('Plugin not found', { status: 404 });
+				}
+
+				pluginData.authorData = authorData;
+				response = await generatePluginHTML(pluginData, env);
+
+				// Cache the response
+				response.headers.set('Cache-Control', 'public, max-age=3600');
+				await cache.put(request, response.clone());
+			} catch (error) {
+				console.error('Error generating plugin page:', error);
+				return new Response('Internal Server Error', { status: 500 });
 			}
-	  
-			pluginData.authorData = authorData;
-			response = await generatePluginHTML(pluginData);
-	  
-			// Cache the response
-			response.headers.set('Cache-Control', 'public, max-age=3600');
-			await cache.put(request, response.clone());
-		  } catch (error) {
-			console.error('Error generating plugin page:', error);
-			return new Response('Internal Server Error', { status: 500 });
-		  }
 		}
-	  
+
 		return response;
-	  },
-	  
-	  async handleGetAuthorDirectory(request, env) {
+	},
+
+	async handleGetAuthorDirectory(request, env) {
 		const url = new URL(request.url);
 		const pathParts = url.pathname.split('/').filter(part => part !== '');
-	  
+
 		if (pathParts.length !== 2 || pathParts[0] !== 'author') {
-		  return new Response('Invalid URL format', { status: 400 });
+			return new Response('Invalid URL format', { status: 400 });
 		}
-	  
+
 		const author = pathParts[1];
-	  
+
 		// Check cache first
 		const cacheKey = `author:${author}`;
 		const cache = caches.default;
 		let response = await cache.match(request);
-	  
+
 		if (!response) {
-		  try {
-			console.log('Author data:', author);
-			const authorData = await this.fetchAuthorPageData(author, env);
-			if (!authorData) {
-			  return new Response('Author not found', { status: 404 });
+			try {
+				console.log('Author data:', author);
+				const authorData = await this.fetchAuthorPageData(author, env);
+				if (!authorData) {
+					return new Response('Author not found', { status: 404 });
+				}
+				console.log(JSON.stringify(authorData));
+				response = await generateAuthorHTML(authorData);
+
+				// Cache the response
+				response.headers.set('Cache-Control', 'public, max-age=3600');
+				await cache.put(request, response.clone());
+			} catch (error) {
+				console.error('Error generating author page:', error);
+				return new Response('Internal Server Error', { status: 500 });
 			}
-			console.log(JSON.stringify(authorData));
-			response = await generateAuthorHTML(authorData);
-	  
-			// Cache the response
-			response.headers.set('Cache-Control', 'public, max-age=3600');
-			await cache.put(request, response.clone());
-		  } catch (error) {
-			console.error('Error generating author page:', error);
-			return new Response('Internal Server Error', { status: 500 });
-		  }
 		}
-	  
+
 		return response;
-	  },
-	  
+	},
+
 	async fetchPluginData(author, slug, env) {
 		const jsonKey = `${author}/${slug}/${slug}.json`;
 		const jsonObject = await env.PLUGIN_BUCKET.get(jsonKey);
@@ -871,6 +992,11 @@ export default {
 		// Route the request
 		switch (request.method) {
 			case 'GET':
+				if (path === '/download') {
+					return this.handleDownload(request, env);
+				} else if (path === '/download-count') {
+					return this.getDownloadCount(request, env);
+				}
 				if (path.startsWith('/directory/') && path.split('/').length === 4) {
 					return this.handleGetPluginDirectory(request, env);
 				} else if (path.startsWith('/author/') && path.split('/').length === 3) {

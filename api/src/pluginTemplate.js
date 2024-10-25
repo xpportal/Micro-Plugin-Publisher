@@ -1,6 +1,6 @@
 import { createSecureHtmlService } from './secureHtmlService';
 
-export default async function generatePluginHTML(pluginData) {
+export default async function generatePluginHTML(pluginData, env) {
   const secureHtmlService = createSecureHtmlService();
   // Sanitize the input data
   const safePlugin = secureHtmlService.sanitizePluginData(pluginData);
@@ -9,6 +9,10 @@ export default async function generatePluginHTML(pluginData) {
     return new Response('Invalid plugin data', { status: 400 });
   }
 
+    // Fetch the current download count
+	const downloadKey = `downloads:${safePlugin.author}:${safePlugin.slug}`;
+	const downloadCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
+  
   const html = `
     <!DOCTYPE html>
     <html lang="en">
@@ -75,14 +79,15 @@ export default async function generatePluginHTML(pluginData) {
                     <span>${safePlugin.rating}/5</span>
                   ` : ''}
                   </div>
-                  <div class="flex items-center">
-                    <span class="mr-2 text-purple-600">↓</span>
-                    <span class="text-s">${safePlugin.active_installs}+ downloads</span>
-                  </div>
+					<div class="flex items-center">
+					<span class="mr-2 text-purple-600">↓</span>
+					<span class="text-s" id="download-count">${downloadCount.toLocaleString()}+ downloads</span>
+					</div>
                 </div>
-                <a href="${safePlugin.download_link}" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-3xl mb-4 flex items-center justify-center">
-                  Download v${safePlugin.version}
-                </a>
+				<a href="/download?author=${encodeURIComponent(safePlugin.author)}&slug=${encodeURIComponent(safePlugin.slug)}" 
+				class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-3xl mb-4 flex items-center justify-center">
+				Download v${safePlugin.version}
+				</a>
                 <div class="text-sm text-gray-200">
                   <p>Last updated: ${safePlugin.last_updated}</p>
                   <p>Version: ${safePlugin.version}</p>

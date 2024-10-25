@@ -63,31 +63,31 @@ class SecureHtmlService {
 
 	createScriptTransformer(nonce) {
 		return {
-		  element: (element) => {
-			if (element.tagName === 'script') {
-			  // Allow scripts from allowed domains
-			  const src = element.getAttribute('src');
-			  if (src && (
-				src.includes('cdn.jsdelivr.net') || 
-				src.includes('playground.wordpress.net')
-			  )) {
-				element.setAttribute('nonce', nonce);
-				return;
-			  }
-	
-			  // Allow our playground initialization script
-			  if (element.hasAttribute('data-playground-init')) {
-				element.setAttribute('nonce', nonce);
-				return;
-			  }
-	
-			  // Remove other scripts
-			  element.remove();
+			element: (element) => {
+				if (element.tagName === 'script') {
+					// Allow scripts from allowed domains
+					const src = element.getAttribute('src');
+					if (src && (
+						src.includes('cdn.jsdelivr.net') ||
+						src.includes('playground.wordpress.net')
+					)) {
+						element.setAttribute('nonce', nonce);
+						return;
+					}
+
+					// Allow our playground initialization script
+					if (element.hasAttribute('data-playground-init')) {
+						element.setAttribute('nonce', nonce);
+						return;
+					}
+
+					// Remove other scripts
+					element.remove();
+				}
 			}
-		  }
 		};
 	}
-	  
+
 	createLinkTransformer() {
 		return {
 			element: (element) => {
@@ -142,7 +142,7 @@ class SecureHtmlService {
 			rating: parseFloat(plugin.rating) || 0,
 			active_installs: parseInt(plugin.active_installs) || 0,
 			last_updated: this.sanitizeText(plugin.last_updated),
-			author: this.sanitizeText(plugin.author),		
+			author: this.sanitizeText(plugin.author),
 			banners: {
 				"high": this.sanitizeUrl(plugin.banners?.high || '/images/default-banner.jpg'),
 				"low": this.sanitizeUrl(plugin.banners?.low || '/images/default-banner.jpg')
