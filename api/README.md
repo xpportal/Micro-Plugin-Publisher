@@ -189,7 +189,7 @@ The system also provides a browser-friendly search interface at /directory/searc
 	- Direct links to plugin detail pages
 
 
-![Micro Plugin Publisher Search](docs/assets/micro-plugin-publisher-search-page.jpg)
+![Micro Plugin Publisher Search](../docs/assets/micro-plugin-publisher-search-page.jpg)
 
 
 ### Database Schema
