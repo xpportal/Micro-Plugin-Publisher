@@ -1,6 +1,6 @@
 import { createSecureHtmlService } from './secureHtmlService';
 // In generatePluginHTML.js
-import { createSearchBar } from './searchBar';
+import { createHeaderSearchBar } from './headerSearchBar';
 
 export default async function generatePluginHTML(pluginData, env) {
 	const secureHtmlService = createSecureHtmlService();
@@ -14,7 +14,7 @@ export default async function generatePluginHTML(pluginData, env) {
 	// Fetch the current download count
 	const downloadKey = `downloads:${safePlugin.author}:${safePlugin.slug}`;
 	const downloadCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
-
+	const activeInstalls = safePlugin.active_installs;
 	const html = `
     <!DOCTYPE html>
     <html lang="en">
@@ -32,7 +32,7 @@ export default async function generatePluginHTML(pluginData, env) {
     </head>
     <body>
       <div class="min-h-screen bg-[#191919] text-white">
-	  		  			${createSearchBar()}
+	  		  			${createHeaderSearchBar()}
         <div class="bg-gradient-to-r from-green-500 to-purple-600 pt-16">
           <div class="container mx-auto px-2 max-h-[620px]">
             <div class="relative max-w-[1300px] mx-auto shadow-lg rounded-t-2xl overflow-hidden">
@@ -85,6 +85,10 @@ export default async function generatePluginHTML(pluginData, env) {
 					<div class="flex items-center">
 					<span class="mr-2 text-purple-600">↓</span>
 					<span class="text-s" id="download-count">${downloadCount.toLocaleString()}+ downloads</span>
+					</div>
+					<div class="flex items-center">
+					<span class="mr-2 text-purple-600">🔌</span>
+						<span class="text-s" id="active-installs">${activeInstalls.toLocaleString()}+ activations</span>
 					</div>
                 </div>
 				<a href="/download?author=${encodeURIComponent(safePlugin.author)}&slug=${encodeURIComponent(safePlugin.slug)}" 
