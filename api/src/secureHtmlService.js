@@ -128,7 +128,6 @@ class SecureHtmlService {
 
 	sanitizePluginData(plugin) {
 		if (!plugin) return null;
-		console.log(JSON.stringify(plugin));
 		return {
 			name: this.sanitizeText(plugin.name),
 			slug: this.sanitizeText(plugin.slug),
@@ -141,15 +140,15 @@ class SecureHtmlService {
 			requires_php: this.sanitizeText(plugin.requires_php),
 			rating: parseFloat(plugin.rating) || 0,
 			active_installs: parseInt(plugin.active_installs) || 0,
-			last_updated: this.sanitizeText(plugin.last_updated),
+			last_updated: this.sanitizeText(plugin.updated_at),
 			author: this.sanitizeText(plugin.author),
 			banners: {
-				"high": this.sanitizeUrl(plugin.banners?.high || '/images/default-banner.jpg'),
-				"low": this.sanitizeUrl(plugin.banners?.low || '/images/default-banner.jpg')
+				"high": this.sanitizeUrl(plugin.banners_high || plugin.banners?.high || 'default-banner-1500x620.jpg'),
+				"low": this.sanitizeUrl(plugin.banners_low || plugin.banners?.low || '/images/default-banner.jpg')
 			},
 			icons: {
-				'1x': this.sanitizeUrl(plugin.icons?.['1x'] || '/images/default-icon.jpg'),
-				'2x': this.sanitizeUrl(plugin.icons?.['2x'] || '/images/default-icon.jpg')
+				'1x': this.sanitizeUrl(plugin.icons_1x || plugin.icons?.['1x'] || '/images/default-icon.jpg'),
+				'2x': this.sanitizeUrl(plugin.icons_2x || plugin.icons?.['2x'] || '/images/default-icon.jpg')
 			},
 			sections: plugin.sections ? {
 				installation: this.sanitizeText(plugin.sections.installation),

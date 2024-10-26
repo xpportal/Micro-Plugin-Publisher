@@ -59,24 +59,49 @@ The `wrangler.toml` file in your project directory contains the configuration fo
 
 The Plugin Publishing System provides the following endpoints:
 
-- `GET /plugin-data`: Retrieve plugin data (cached)
-- `GET /author-data`: Retrieve author data (cached)
-- `GET /authors-list`: Get a list of all authors (cached)
-- `GET /directory/{author}/{slug}`: Get the HTML page for a specific plugin (cached)
-- `GET /author/{author}`: Get the HTML page for a specific author (cached)
-- `GET /version-check` : Compares new version against author/slug/slug.json.
-- `POST /upload-chunk`: Upload a chunk of a plugin file
-- `POST /upload-json`: Upload JSON metadata for a plugin
-- `POST /finalize-upload`: Finalize a plugin upload
-- `POST /update-author-info`: Update author information
-- `POST /upload-asset`: Upload plugin assets (e.g., icons, banners)
-- `POST /backup-plugin` : Takes author/slug/version to create a backup of the currently live files.
+### GET Endpoints
+- `/plugin-data`: Retrieve plugin data (cached)
+- `/author-data`: Retrieve author data (cached)
+- `/authors-list`: Get a list of all authors (cached)
+- `/directory/{author}/{slug}`: Get the HTML page for a specific plugin (cached)
+- `/author/{author}`: Get the HTML page for a specific author (cached)
+- `/version-check`: Compare new version against author/slug/slug.json
+- `/download`: Download a plugin file
+- `/download-count`: Get download count for a plugin
+- `/search`: Search plugins with optional tag filtering
+- `/directory/search`: Get HTML search results page
 
-To use the `POST` endpoints, you'll need to include your API Secret in the `Authorization` header of your requests as a Bearer token.
+### POST Endpoints
+- `/migrate-data`: Migrate existing data to SQLite database
+- `/record-download`: Record a plugin download
+- `/upload-chunk`: Upload a chunk of a plugin file
+- `/upload-json`: Upload JSON metadata for a plugin
+- `/finalize-upload`: Finalize a plugin upload
+- `/update-author-info`: Update author information
+- `/upload-asset`: Upload plugin assets (icons, banners)
+- `/backup-plugin`: Create backup of currently live files
+- `/clear-cache`: Clear cached responses
+
+To use `POST` endpoints, include your API Secret in the Authorization header:
+
+```bash
+curl -X POST https://your-worker.dev/clear-cache \
+  -H "Authorization: Bearer YOUR_API_SECRET" \
+  -H "Content-Type: application/json"
+```
 
 ## Caching
 
-The API implements caching for all GET requests, improving performance and reducing load on the backend. Cached responses are automatically invalidated when relevant data is updated (e.g., when a new plugin is published or author information is updated, or when a `GET` request against plugin-data contains a secret).
+The API implements caching for all GET requests. Features include:
+- CDN edge caching with 1-hour TTL
+- Version-based cache keys
+- Automatic cache invalidation on content updates 
+- Auth-based cache bypassing when using API secret
+
+Cached responses are automatically invalidated when:
+- A new plugin is published
+- Author information is updated
+- A GET request contains a valid API secret
 
 ## Version Control and Backup
 
@@ -124,6 +149,125 @@ The backup process:
 
 If a backup already exists for the given version, the endpoint returns a message indicating so without creating a duplicate backup.
 
+## Search and SQLite Database
+
+This system uses a SQLite database within a Durable Object to provide search functionality and efficient plugin management. The database automatically syncs with the R2 storage system when plugins are uploaded or updated.
+
+### Search Endpoints
+
+The system provides a search endpoint:
+
+```bash
+# Basic search
+curl 'https://your-worker.workers.dev/search?q=pluginname'
+
+# Search by tag
+curl 'https://your-worker.workers.dev/search?tag=xr'
+
+# Combined search with pagination
+curl 'https://your-worker.workers.dev/search?q=pluginname&tag=xr&limit=20&offset=0'
+```
+
+Search parameters:
+- `q`: Text to search for (searches across name, description, and author)
+- `tag`: Filter by tag (can be specified multiple times)
+- `limit`: Maximum number of results (default: 20)
+- `offset`: Pagination offset (default: 0)
+
+HTML Interface:
+The system also provides a browser-friendly search interface at /directory/search with:
+
+- Real-time search results
+- Tag filtering
+- Grid view of plugins with:
+	- Banner images
+	- Plugin icons
+	- Version info
+	- Last update date
+	- Author attribution
+	- Pagination controls
+	- Direct links to plugin detail pages
+
+
+![Micro Plugin Publisher Search](docs/assets/micro-plugin-publisher-search-page.jpg)
+
+
+### Database Schema
+
+The SQLite database contains three main tables:
+
+```sql
+-- Plugin metadata table
+CREATE TABLE plugins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  author TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  short_description TEXT,
+  version TEXT NOT NULL,
+  download_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(author, slug)
+);
+
+-- Plugin tags for search
+CREATE TABLE plugin_tags (
+  plugin_id INTEGER,
+  tag TEXT NOT NULL,
+  FOREIGN KEY(plugin_id) REFERENCES plugins(id),
+  PRIMARY KEY(plugin_id, tag)
+);
+
+-- Download tracking queue
+CREATE TABLE download_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plugin_id INTEGER,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  processed BOOLEAN DEFAULT FALSE,
+  FOREIGN KEY(plugin_id) REFERENCES plugins(id)
+);
+```
+
+### Initial Database Setup
+
+After deploying, you'll need to migrate your existing plugins to the SQLite database:
+
+```bash
+# Migrate existing data from R2 to SQLite
+curl -X POST https://your-worker.workers.dev/migrate-data \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Download Tracking
+
+Downloads are tracked in a queue system to ensure accurate counting under high load:
+1. Records each download in the queue
+2. Processes downloads in batches
+3. Updates plugin download counts safely through Durable Objects
+4. Maintains consistency under concurrent access
+
+The queue system prevents:
+- Race conditions during updates
+- Lost download counts under high load
+- Data inconsistency across zones
+
+### Configuration
+
+To enable the SQLite functionality, your `wrangler.toml` needs:
+
+```toml
+[[durable_objects.bindings]]
+name = "PLUGIN_REGISTRY"
+class_name = "PluginRegistryDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PluginRegistryDO"]
+```
+
+This binds the Durable Object to your worker and enables SQLite for the database.
+
 ### Implementation Details
 
 - Backups are stored in the same R2 bucket as the main plugin files, organized by version.
@@ -135,11 +279,24 @@ These features ensure:
 - Version history maintenance for each plugin.
 - The ability to rollback to previous versions if needed.
 
+Rate Limiting:
+- IP-based rate limiting using Cloudflare KV
+- 5 downloads per hour per IP/plugin combination
+
+Chunked Uploads:
+Large plugin files are handled through chunked uploads. The system:
+- Splits files into manageable chunks
+- Handles upload interruption/resume
+- Validates chunk integrity
+- Cleans up incomplete uploads
+- Processes chunks using format `{folderName}/chunks_{pluginName}/{pluginName}_chunk_{number}_{total}`
+
+
 When using the API to upload or update plugins, always include the version information and follow the workflow of checking versions and creating backups before finalizing uploads.
 
-## Customizing Author Pages
+## Customizing Author Plugin and Search Pages
 
-Author pages can be customized by modifying the `generateAuthorHTML` function in the worker code. To customize your author page:
+Pages can be customized by modifying the `generate<type>HTML` function in each worker template file. To customize your author page:
 
 1. Edit the `src/authorTemplate.js` file (or create it if it doesn't exist).
 2. Implement your custom HTML generation logic. For example:
@@ -204,6 +361,17 @@ To modify the worker's functionality:
 - Keep your API Secret secure. It's used to authenticate requests to your Plugin Publishing System.
 - Regularly rotate your API Secret to maintain security.
 - Ensure your Cloudflare account has appropriate security measures in place, such as two-factor authentication.
+
+### Content Security
+- CSP headers with nonce-based script execution
+- HTML sanitization for user-provided content
+- URL and resource validation
+- Tag and attribute whitelisting
+
+### API Security 
+- Rate limiting on sensitive endpoints
+- Required auth for all POST operations
+- Secure session handling
 
 ## Troubleshooting
 

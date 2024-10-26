@@ -1,4 +1,5 @@
 import { createSecureHtmlService } from './secureHtmlService';
+import { createSearchBar } from './searchBar';
 
 export default function generateAuthorHTML(authorData) {
 	const secureHtmlService = createSecureHtmlService();
@@ -21,7 +22,7 @@ export default function generateAuthorHTML(authorData) {
 		rel="stylesheet"
 		crossorigin="anonymous"
 	>
-	<script 
+	<script
 		src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"
 		crossorigin="anonymous"
 	></script>
@@ -62,6 +63,9 @@ export default function generateAuthorHTML(authorData) {
 	<body>
 	<div class="min-h-screen bg-[#191919] text-white">
 		<div class="bg-gradient-to-r from-purple-500 to-blue-400 pb-0 pt-0 hero-card-container-outer mx-0 px-0">
+		<div class="bg-black bg-opacity-50 w-full">
+			${createSearchBar()}
+		</div>
 		<div class="container mx-auto px-0 pb-2">
 			<div class="asset-card-author rounded-b-3xl p-8 mb-8 shadow-2xl transform min-h-[200px]">
 			<div class="flex flex-col md:flex-row items-center md:items-start">
@@ -110,7 +114,7 @@ export default function generateAuthorHTML(authorData) {
 				<div class="bg-gradient-to-br asset-card-container-home rounded-xl shadow-2xl transform flex flex-col h-full">
 					<div class="p-6 flex flex-col h-full">
 					<div class="flex items-center mb-0">
-						<img src="${plugin.icons['1x'] || '/images/default-icon.jpg'}" alt="${plugin.name}" class="w-16 h-16 mb-4 rounded-lg" />
+						<img src="${plugin.icons?.['1x'] || '/images/default-icon.jpg'}" alt="${plugin.name}" class="w-16 h-16 mb-4 rounded-lg" />
 						<a href="/directory/${safeAuthor.username}/${plugin.slug}" class="">
 						<h3 class="text-xl font-bold mb-2 ml-4">${plugin.name}</h3>
 						</a>

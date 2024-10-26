@@ -1,19 +1,21 @@
 import { createSecureHtmlService } from './secureHtmlService';
+// In generatePluginHTML.js
+import { createSearchBar } from './searchBar';
 
 export default async function generatePluginHTML(pluginData, env) {
-  const secureHtmlService = createSecureHtmlService();
-  // Sanitize the input data
-  const safePlugin = secureHtmlService.sanitizePluginData(pluginData);
-  console.log("datertots", JSON.stringify(pluginData));
-  if (!safePlugin) {
-    return new Response('Invalid plugin data', { status: 400 });
-  }
+	const secureHtmlService = createSecureHtmlService();
+	// Sanitize the input data
+	const safePlugin = secureHtmlService.sanitizePluginData(pluginData); // Remove env parameter here
+	console.log("datertots", JSON.stringify(pluginData));
+	if (!safePlugin) {
+		return new Response('Invalid plugin data', { status: 400 });
+	}
 
-    // Fetch the current download count
+	// Fetch the current download count
 	const downloadKey = `downloads:${safePlugin.author}:${safePlugin.slug}`;
 	const downloadCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
-  
-  const html = `
+
+	const html = `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -30,6 +32,7 @@ export default async function generatePluginHTML(pluginData, env) {
     </head>
     <body>
       <div class="min-h-screen bg-[#191919] text-white">
+	  		  			${createSearchBar()}
         <div class="bg-gradient-to-r from-green-500 to-purple-600 pt-16">
           <div class="container mx-auto px-2 max-h-[620px]">
             <div class="relative max-w-[1300px] mx-auto shadow-lg rounded-t-2xl overflow-hidden">
@@ -116,7 +119,7 @@ export default async function generatePluginHTML(pluginData, env) {
         </div>
         <div class="bg-black py-8">
           <div class="container mx-auto px-4 text-center text-gray-200">
-            <p>&copy; ${new Date().getFullYear()} Your Footer Text</p>
+			<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
             <p>
               <a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
               <a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a>
@@ -128,5 +131,5 @@ export default async function generatePluginHTML(pluginData, env) {
     </html>
   `;
 
-  return secureHtmlService.transformHTML(html);
+	return secureHtmlService.transformHTML(html);
 }

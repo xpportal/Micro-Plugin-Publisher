@@ -2,6 +2,7 @@
 import { Buffer } from 'buffer';
 import generatePluginHTML from './pluginTemplate';
 import generateAuthorHTML from './authorTemplate';
+import generateSearchHTML from './searchTemplate';
 
 // Define CORS headers
 const CORS_HEADERS = {
@@ -10,8 +11,324 @@ const CORS_HEADERS = {
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+
+export class PluginRegistryDO {
+	constructor(state, env) {
+		this.state = state;
+		this.env = env;
+
+		// Initialize SQLite storage
+		this.sql = state.storage.sql;
+
+		// Initialize the database schema
+		this.initializeSchema();
+	}
+
+	async addMissingColumns() {
+		try {
+			// Get current columns and convert cursor to array
+			const columns = this.sql.exec(`PRAGMA table_info(plugins)`).toArray();
+			console.log('Current table schema before adding columns:', columns);
+
+			const columnNames = columns.map(col => col.name);
+
+			// Add each missing column if it doesn't exist
+			const columnsToAdd = [
+				{ name: 'icons_1x', type: 'TEXT' },
+				{ name: 'icons_2x', type: 'TEXT' },
+				{ name: 'banners_high', type: 'TEXT' },
+				{ name: 'banners_low', type: 'TEXT' }
+			];
+
+			for (const column of columnsToAdd) {
+				if (!columnNames.includes(column.name)) {
+					console.log(`Adding column ${column.name}`);
+					await this.sql.exec(`
+						ALTER TABLE plugins 
+						ADD COLUMN ${column.name} ${column.type}
+					`);
+				}
+			}
+
+			// Verify columns were added
+			const updatedColumns = this.sql.exec(`PRAGMA table_info(plugins)`).toArray();
+			console.log('Updated table schema:', updatedColumns);
+
+		} catch (error) {
+			console.error("Error adding missing columns:", error);
+			throw error; // Re-throw to handle in the caller
+		}
+	}
+
+	async initializeSchema() {
+		try {
+			// Create tables if they don't exist
+			this.sql.exec(`
+				-- Plugin metadata table
+				CREATE TABLE IF NOT EXISTS plugins (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					author TEXT NOT NULL,
+					slug TEXT NOT NULL,
+					name TEXT NOT NULL,
+					short_description TEXT,
+					version TEXT NOT NULL,
+					download_count INTEGER DEFAULT 0,
+					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					UNIQUE(author, slug)
+				);
+				
+				-- Plugin tags for search
+				CREATE TABLE IF NOT EXISTS plugin_tags (
+					plugin_id INTEGER,
+					tag TEXT NOT NULL,
+					FOREIGN KEY(plugin_id) REFERENCES plugins(id),
+					PRIMARY KEY(plugin_id, tag)
+				);
+				
+				-- Download tracking queue
+				CREATE TABLE IF NOT EXISTS download_queue (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					plugin_id INTEGER,
+					timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					processed BOOLEAN DEFAULT FALSE,
+					FOREIGN KEY(plugin_id) REFERENCES plugins(id)
+				);
+				
+				-- Create indexes for search performance
+				CREATE INDEX IF NOT EXISTS idx_plugins_search 
+				ON plugins(name, short_description);
+				
+				CREATE INDEX IF NOT EXISTS idx_plugins_downloads
+				ON plugins(download_count DESC);
+				
+				CREATE INDEX IF NOT EXISTS idx_download_queue_unprocessed
+				ON download_queue(processed) WHERE processed = FALSE;
+			`);
+
+			// Now add any missing columns
+			await this.addMissingColumns();
+
+		} catch (error) {
+			console.error("Error initializing schema:", error);
+			throw error;
+		}
+	}
+
+	async migrateExistingData() {
+		try {
+			console.log("Starting data migration...");
+
+			// Get list of all objects in bucket
+			const list = await this.env.PLUGIN_BUCKET.list();
+			const authors = new Set();
+			const pluginsToMigrate = [];
+
+			// First pass: collect all authors and plugin metadata files
+			for (const item of list.objects) {
+				const parts = item.key.split('/');
+				if (parts.length > 1) {
+					authors.add(parts[0]); // Add author
+					if (parts.length === 3 && parts[2].endsWith('.json') && !parts[2].includes('author_info')) {
+						pluginsToMigrate.push({
+							author: parts[0],
+							slug: parts[1],
+							jsonKey: item.key
+						});
+					}
+				}
+			}
+
+			console.log(`Found ${pluginsToMigrate.length} plugins to migrate`);
+
+			// Use proper transaction API
+			await this.state.storage.transaction(async (txn) => {
+				// Process each plugin
+				for (const plugin of pluginsToMigrate) {
+					const jsonObject = await this.env.PLUGIN_BUCKET.get(plugin.jsonKey);
+					if (!jsonObject) continue;
+
+					const pluginData = JSON.parse(await jsonObject.text());
+					const pluginInfo = Array.isArray(pluginData) ? pluginData[0] : pluginData;
+
+					// Insert plugin with the correct number of values matching the columns
+					const result = this.sql.exec(`
+				INSERT OR REPLACE INTO plugins (
+				  author,
+				  slug,
+				  name,
+				  short_description,
+				  icons_1x,
+				  icons_2x,
+				  banners_high,
+				  banners_low,
+				  version,
+				  download_count,
+				  created_at,
+				  updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+				RETURNING id
+			  `,
+						plugin.author,
+						plugin.slug,
+						pluginInfo.name || plugin.slug,
+						pluginInfo.short_description || '',
+						pluginInfo.icons?.['1x'] || '',
+						pluginInfo.icons?.['2x'] || '',
+						pluginInfo.banners?.high || '',
+						pluginInfo.banners?.low || '',
+						pluginInfo.version || '1.0.0',
+						0 // Initial download count
+					).one();
+
+					// If plugin has tags, insert them
+					if (pluginInfo.tags && Array.isArray(pluginInfo.tags)) {
+						for (const tag of pluginInfo.tags) {
+							this.sql.exec(
+								"INSERT OR IGNORE INTO plugin_tags (plugin_id, tag) VALUES (?, ?)",
+								result.id,
+								tag
+							);
+						}
+					}
+
+					console.log(`Migrated plugin: ${plugin.author}/${plugin.slug}`);
+				}
+			});
+
+			return {
+				success: true,
+				message: `Migration completed. Processed ${pluginsToMigrate.length} plugins.`
+			};
+		} catch (error) {
+			console.error("Migration error:", error);
+			return {
+				success: false,
+				error: error.message
+			};
+		}
+	}
+
+
+	// Handle search requests
+	async handleSearch(query = '', tags = [], limit = 20, offset = 0) {
+		// Handle empty query case
+		const whereClause = query ?
+			`WHERE (name LIKE ? OR short_description LIKE ? OR author LIKE ?)` :
+			'WHERE 1=1';
+
+		const tagFilters = tags.length > 0 ?
+			`AND id IN (
+			SELECT plugin_id FROM plugin_tags 
+			WHERE tag IN (${tags.map(() => '?').join(',')})
+			GROUP BY plugin_id 
+			HAVING COUNT(DISTINCT tag) = ${tags.length}
+		  )` : '';
+
+		const params = query ?
+			[...query.split(' ').flatMap(term => [`%${term}%`, `%${term}%`, `%${term}%`]), ...tags, limit, offset] :
+			[...tags, limit, offset];
+
+		const results = this.sql.exec(`
+		  SELECT DISTINCT p.*, 
+			(
+			  SELECT GROUP_CONCAT(tag) 
+			  FROM plugin_tags 
+			  WHERE plugin_id = p.id
+			) as tags
+		  FROM plugins p
+		  ${whereClause}
+		  ${tagFilters}
+		  ORDER BY download_count DESC, updated_at DESC
+		  LIMIT ? OFFSET ?
+		`, ...params).toArray();
+
+		return results;
+	}
+
+	// Record a download
+	async recordDownload(author, slug) {
+		const plugin = this.sql.exec(
+			"SELECT id FROM plugins WHERE author = ? AND slug = ?",
+			author, slug
+		).one();
+
+		if (!plugin) return false;
+
+		// Add to download queue
+		this.sql.exec(
+			"INSERT INTO download_queue (plugin_id) VALUES (?)",
+			plugin.id
+		);
+
+		return true;
+	}
+
+	// Process download queue (called periodically)
+	async processDownloadQueue() {
+		await this.state.storage.transaction(async (txn) => {
+			// Get unprocessed downloads grouped by plugin
+			const downloads = this.sql.exec(`
+			SELECT plugin_id, COUNT(*) as count 
+			FROM download_queue 
+			WHERE processed = FALSE 
+			GROUP BY plugin_id
+		  `).toArray();
+
+			// Update download counts
+			for (const { plugin_id, count } of downloads) {
+				this.sql.exec(`
+			  UPDATE plugins 
+			  SET download_count = download_count + ?, 
+				  updated_at = CURRENT_TIMESTAMP 
+			  WHERE id = ?
+			`, count, plugin_id);
+			}
+
+			// Mark downloads as processed
+			this.sql.exec(`
+			UPDATE download_queue 
+			SET processed = TRUE 
+			WHERE processed = FALSE
+		  `);
+		});
+	}
+
+	async fetch(request) {
+		if (request.method === "GET") {
+			return new Response("Method not allowed", { status: 405 });
+		}
+
+		const url = new URL(request.url);
+		switch (url.pathname) {
+			case '/search':
+				const { query, tags, limit, offset } = await request.json();
+				const results = await this.handleSearch(query, tags, limit, offset);
+				return new Response(JSON.stringify(results), {
+					headers: { 'Content-Type': 'application/json' }
+				});
+			case '/migrate-data':
+				const migrationResult = await this.migrateExistingData();
+				return new Response(JSON.stringify(migrationResult), {
+					headers: { 'Content-Type': 'application/json' }
+				});
+			case '/record-download':
+				const { author, slug } = await request.json();
+				const success = await this.recordDownload(author, slug);
+				return new Response(JSON.stringify({ success }), {
+					headers: { 'Content-Type': 'application/json' }
+				});
+			default:
+				return new Response("Not found", { status: 404 });
+		}
+	}
+
+}
+
+
 // Main worker class
 export default {
+
 	handleOptions(request) {
 		return new Response(null, {
 			status: 204,
@@ -34,6 +351,14 @@ export default {
 			return false;
 		}
 		return true;
+	},
+
+	async scheduled(event, env, ctx) {
+		const id = env.PLUGIN_REGISTRY.idFromName("global");
+		const registry = env.PLUGIN_REGISTRY.get(id);
+		await registry.fetch(new Request("http://internal/process-downloads", {
+			method: 'POST'
+		}));
 	},
 
 	async handleDownload(request, env) {
@@ -489,6 +814,7 @@ export default {
 				};
 			}
 
+			// After successfully storing metadata in R2
 			const metadataKey = `${userId}/${pluginName}/${pluginName}.json`;
 			await env.PLUGIN_BUCKET.put(metadataKey, JSON.stringify(finalMetadata), {
 				httpMetadata: {
@@ -496,6 +822,27 @@ export default {
 				},
 			});
 
+			// Update SQLite database
+			const pluginInfo = finalMetadata[0];
+
+			// Get DO instance to update SQLite
+			const id = env.PLUGIN_REGISTRY.idFromName("global");
+			const registry = env.PLUGIN_REGISTRY.get(id);
+
+			const updateRequest = new Request('http://internal/migrate-data', {
+				method: 'POST',
+				body: JSON.stringify({
+					author: userId,
+					slug: sanitizedPluginName,
+					jsonKey: metadataKey
+				})
+			});
+
+			const updateResponse = await registry.fetch(updateRequest);
+			if (!updateResponse.ok) {
+				console.error('Failed to update SQLite database:', await updateResponse.text());
+				// Continue anyway since the file upload was successful
+			}
 
 			const zipUrl = `${objectKey}`;
 			const metadataUrl = `${metadataKey}`;
@@ -745,7 +1092,7 @@ export default {
 					return new Response('Author not found', { status: 404 });
 				}
 				console.log(JSON.stringify(authorData));
-				response = await generateAuthorHTML(authorData);
+				response = await generateAuthorHTML(authorData, env);
 
 				// Cache the response
 				response.headers.set('Cache-Control', 'public, max-age=3600');
@@ -969,18 +1316,154 @@ export default {
 		}
 	},
 
+	async handleSearchResultsPage(request, env) {
+		const url = new URL(request.url);
+		const query = url.searchParams.get('q') || '';
+		const tags = url.searchParams.getAll('tag');
+		const limit = parseInt(url.searchParams.get('limit') || '20');
+		const offset = parseInt(url.searchParams.get('offset') || '0');
+
+		// Get DO instance
+		const id = env.PLUGIN_REGISTRY.idFromName("global");
+		const registry = env.PLUGIN_REGISTRY.get(id);
+
+		// Create internal search request
+		const searchRequest = new Request('http://internal/search', {
+			method: 'POST',
+			body: JSON.stringify({
+				query,
+				tags,
+				limit,
+				offset
+			})
+		});
+
+		try {
+			// Fetch results from Durable Object
+			const searchResponse = await registry.fetch(searchRequest);
+			if (!searchResponse.ok) {
+				throw new Error(`Search request failed: ${searchResponse.status}`);
+			}
+
+			const results = await searchResponse.json();
+
+			// Generate the HTML page with the results
+			return generateSearchHTML(results, query, tags, offset, limit, env);
+		} catch (error) {
+			console.error('Search error:', error);
+			return new Response('Internal Server Error', { status: 500 });
+		}
+	},
+
+	async handleClearCache(request, env) {
+		try {
+			if (!this.authenticateRequest(request, env)) {
+				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+
+			const cache = caches.default;
+			const url = new URL(request.url);
+			const host = request.headers.get('host');
+
+			// List of URL patterns to clear
+			const urlPatterns = [
+				// Plugin-related patterns
+				`/directory/*`,
+				`/plugin-data*`,
+				// Author-related patterns
+				`/author/*`,
+				`/author-data*`,
+				`/authors-list`,
+				// Search-related patterns
+				`/directory/search*`
+			];
+
+			const clearedKeys = [];
+
+			// Get list of all authors to ensure we clear their specific caches
+			const authorsList = await env.PLUGIN_BUCKET.list();
+			const authors = new Set();
+			for (const item of authorsList.objects) {
+				const parts = item.key.split('/');
+				if (parts.length > 1) {
+					authors.add(parts[0]);
+				}
+			}
+
+			// Clear cache for each pattern and author combination
+			for (const pattern of urlPatterns) {
+				if (pattern.includes('*')) {
+					// For wildcard patterns, we need to specifically clear author-related caches
+					for (const author of authors) {
+						const specificUrl = pattern
+							.replace('*', `${author}`)
+							.replace('//', '/');
+						const cacheKey = `https://${host}${specificUrl}`;
+						await cache.delete(cacheKey);
+						clearedKeys.push(cacheKey);
+
+						// If it's a directory pattern, also clear plugin-specific caches
+						if (pattern.startsWith('/directory/')) {
+							const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: `${author}/` });
+							for (const plugin of pluginsList.objects) {
+								const pluginParts = plugin.key.split('/');
+								if (pluginParts.length === 3 && pluginParts[2].endsWith('.json')) {
+									const pluginSlug = pluginParts[1];
+									const pluginUrl = `https://${host}/directory/${author}/${pluginSlug}`;
+									await cache.delete(pluginUrl);
+									clearedKeys.push(pluginUrl);
+								}
+							}
+						}
+					}
+				} else {
+					// For non-wildcard patterns, simply clear the cache
+					const cacheKey = `https://${host}${pattern}`;
+					await cache.delete(cacheKey);
+					clearedKeys.push(cacheKey);
+				}
+			}
+
+			return new Response(JSON.stringify({
+				success: true,
+				message: 'Cache cleared successfully',
+				clearedKeys
+			}), {
+				status: 200,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		} catch (error) {
+			console.error('Cache clear error:', error);
+			return new Response(JSON.stringify({
+				success: false,
+				error: 'Internal server error',
+				details: error.message
+			}), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+
 
 	async fetch(request, env) {
 		const url = new URL(request.url);
 		const path = url.pathname;
 
+		// Get DO instance (one global instance for the registry)
+		const id = env.PLUGIN_REGISTRY.idFromName("global");
+		const registry = env.PLUGIN_REGISTRY.get(id);
+
 		// Handle preflight requests
 		if (request.method === 'OPTIONS') {
-			return handleOptions(request);
+			return this.handleOptions(request);
 		}
 
-		// Authenticate the request
-		if (request.method !== 'GET') {
+		// Authenticate non-GET requests (except search)
+		if (request.method !== 'GET' && path !== '/search') {
 			if (!this.authenticateRequest(request, env)) {
 				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
 					status: 401,
@@ -989,58 +1472,136 @@ export default {
 			}
 		}
 
-		// Route the request
+		// Main request routing
 		switch (request.method) {
-			case 'GET':
-				if (path === '/download') {
-					return this.handleDownload(request, env);
-				} else if (path === '/download-count') {
-					return this.getDownloadCount(request, env);
-				}
-				if (path.startsWith('/directory/') && path.split('/').length === 4) {
-					return this.handleGetPluginDirectory(request, env);
-				} else if (path.startsWith('/author/') && path.split('/').length === 3) {
-					return this.handleGetAuthorDirectory(request, env);
-				} else if (path === '/plugin-data') {
-					return this.handleGetPluginData(request, env);
-				} else if (path === '/author-data') {
-					return this.handleGetAuthorData(request, env);
-				} else if (path === '/authors-list') {
-					return this.handleGetAuthorsList(env);
-				} else if (path === '/version-check') {
-					return this.handleVersionCheck(request, env);
-				}
-				break;
-			case 'POST':
+			case 'GET': {
 				switch (path) {
-					case '/upload-plugin':
-						return this.handlePluginUpload(request, env);
-					case '/plugin-upload-chunk':
-						return this.handlePluginUploadChunk(request, env);
-					case '/plugin-upload-json':
-						return this.handleUploadJson(request, env);
-					case '/plugin-upload-assets':
-						return this.handleUploadAsset(request, env);
-					case '/plugin-upload-complete':
-						return this.handleFinalizeUpload(request, env);
-					case '/update-author-info':
-						return this.handleUpdateAuthorInfo(request, env);
-					case '/backup-plugin':
-						return this.handleBackupPlugin(request, env);
-					default:
+					case '/download': {
+						return this.handleDownload(request, env);
+					}
+					case '/download-count': {
+						return this.getDownloadCount(request, env);
+					}
+					case '/plugin-data': {
+						return this.handleGetPluginData(request, env);
+					}
+					case '/author-data': {
+						return this.handleGetAuthorData(request, env);
+					}
+					case '/authors-list': {
+						return this.handleGetAuthorsList(env);
+					}
+					case '/version-check': {
+						return this.handleVersionCheck(request, env);
+					}
+					case '/search': {
+						const searchQuery = url.searchParams.get('q') || '';
+						const searchTags = url.searchParams.getAll('tag');
+						const limit = parseInt(url.searchParams.get('limit') || '20');
+						const offset = parseInt(url.searchParams.get('offset') || '0');
+
+						const searchRequest = new Request('http://internal/search', {
+							method: 'POST',
+							body: JSON.stringify({
+								query: searchQuery,
+								tags: searchTags,
+								limit,
+								offset
+							})
+						});
+
+						const results = await registry.fetch(searchRequest);
+						return new Response(await results.text(), {
+							headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+						});
+					}
+					case '/directory/search': {
+						return this.handleSearchResultsPage(request, env);
+					}
+					default: {
+						// Handle directory and author paths that need path parameter extraction
+						if (path.startsWith('/directory/') && path.split('/').length === 4) {
+							return this.handleGetPluginDirectory(request, env);
+						}
+						if (path.startsWith('/author/') && path.split('/').length === 3) {
+							return this.handleGetAuthorDirectory(request, env);
+						}
 						break;
+					}
 				}
 				break;
-			default:
+			}
+
+			case 'POST': {
+				switch (path) {
+					case '/migrate-data': {
+						const migrateRequest = new Request('http://internal/migrate-data', {
+							method: 'POST'
+						});
+						return await registry.fetch(migrateRequest);
+					}
+					case '/record-download': {
+						const author = url.searchParams.get('author');
+						const slug = url.searchParams.get('slug');
+
+						if (!author || !slug) {
+							return new Response(JSON.stringify({ error: 'Missing author or slug parameter' }), {
+								status: 400,
+								headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+							});
+						}
+
+						const downloadRequest = new Request(url, {
+							method: 'POST',
+							body: JSON.stringify({ author, slug })
+						});
+						return await registry.fetch(downloadRequest);
+					}
+					case '/upload-plugin': {
+						return this.handlePluginUpload(request, env);
+					}
+					case '/plugin-upload-chunk': {
+						return this.handlePluginUploadChunk(request, env);
+					}
+					case '/plugin-upload-json': {
+						return this.handleUploadJson(request, env);
+					}
+					case '/plugin-upload-assets': {
+						return this.handleUploadAsset(request, env);
+					}
+					case '/plugin-upload-complete': {
+						return this.handleFinalizeUpload(request, env);
+					}
+					case '/update-author-info': {
+						return this.handleUpdateAuthorInfo(request, env);
+					}
+					case '/backup-plugin': {
+						return this.handleBackupPlugin(request, env);
+					}
+					case '/clear-cache': {
+						return this.handleClearCache(request, env);
+					}
+					default: {
+						return new Response(JSON.stringify({ error: 'Invalid endpoint' }), {
+							status: 404,
+							headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+						});
+					}
+				}
+				break;
+			}
+
+			default: {
 				return new Response(JSON.stringify({ error: 'Method not allowed' }), {
 					status: 405,
-					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
+			}
 		}
 
 		return new Response(JSON.stringify({ error: 'Not found' }), {
 			status: 404,
-			headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 		});
-	},
+	}
 };

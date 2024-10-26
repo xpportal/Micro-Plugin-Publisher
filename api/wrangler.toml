@@ -1,8 +1,8 @@
 name = "micro-plugin-publisher"
 main = "src/worker.js"
-compatibility_date = "2023-05-18"
+compatibility_date = "2024-10-25"  # Update to today's date
+compatibility_flags = ["nodejs_compat"]  # Use this instead of node_compat
 account_id = "95d5ca589c39bf4189b080cfc8417c8e"
-node_compat = true
 
 kv_namespaces = [
   { binding = "DOWNLOAD_COUNTS", id = "64c89ebd74d642e190180b5b89790b8a", preview_id = "64c89ebd74d642e190180b5b89790b8a" },
@@ -12,6 +12,15 @@ kv_namespaces = [
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+[[durable_objects.bindings]]
+name = "PLUGIN_REGISTRY"
+class_name = "PluginRegistryDO"
+
+# Single migration that creates the DO with SQLite enabled
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PluginRegistryDO"]
 
 [vars]
 PLUGIN_BUCKET_URL = "https://micro-plugin-publisher.95d5ca589c39bf4189b080cfc8417c8e.r2.cloudflarestorage.com"
