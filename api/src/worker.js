@@ -4,8 +4,11 @@ import generatePluginHTML from './pluginTemplate';
 import generateAuthorHTML from './authorTemplate';
 import generateSearchHTML from './searchTemplate';
 import generateHomeHTML from './homeTemplate';
+import generateRegisterHTML from './registrationTemplate';
+import { UserAuthDO } from './userAuthDO';
 import { removeAuthor, removePlugin } from './management';
 
+export { UserAuthDO };
 
 // Define CORS headers
 const CORS_HEADERS = {
@@ -525,9 +528,18 @@ export class PluginRegistryDO {
 			const migrationState = {
 				processedItems: 0,
 				errors: [],
-				successes: [] // Track successful migrations
+				successes: []
 			};
 
+			// First, get all users from the users table
+			const users = await this.sql.exec(`
+			SELECT username FROM users
+		  `).toArray();
+
+			// Create a set of existing users
+			const existingUsers = new Set(users.map(u => u.username));
+
+			// List all directories in the bucket
 			const list = await this.env.PLUGIN_BUCKET.list();
 			const authorDirectories = new Set();
 
@@ -540,49 +552,74 @@ export class PluginRegistryDO {
 
 			console.log(`Found ${authorDirectories.size} potential authors to migrate`);
 
-			// Process each author
+			// Process each author directory
 			for (const author of authorDirectories) {
 				try {
 					const authorInfoKey = `${author}/author_info.json`;
-
 					const authorInfoObject = await this.env.PLUGIN_BUCKET.get(authorInfoKey);
 
+					// If no author_info.json exists and this is a valid user, create it
+					if (!authorInfoObject && existingUsers.has(author)) {
+						const authorInfo = {
+							username: author,
+							email: "",
+							avatar_url: "https://assets.pluginpublisher.com/default_pfp.jpg",
+							bio: "",
+							member_since: new Date().toISOString(),
+							website: "",
+							twitter: "",
+							github: "",
+							plugins: []
+						};
+
+						// Store new author_info.json
+						await this.env.PLUGIN_BUCKET.put(authorInfoKey, JSON.stringify(authorInfo, null, 2), {
+							httpMetadata: {
+								contentType: 'application/json',
+							},
+						});
+
+						// Add to authors table if not exists
+						await this.sql.exec(`
+				  INSERT OR IGNORE INTO authors (
+					username,
+					email,
+					avatar_url,
+					bio,
+					member_since,
+					website,
+					twitter,
+					github
+				  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				`, author, "", authorInfo.avatar_url, "", authorInfo.member_since, "", "", "");
+
+						migrationState.processedItems++;
+						migrationState.successes.push(author);
+						console.log(`Created new author_info.json for user: ${author}`);
+						continue;
+					}
+
+					// Handle existing author_info.json files
 					if (authorInfoObject) {
 						const authorInfoText = await authorInfoObject.text();
-						let authorData;
+						let authorData = typeof authorInfoText === 'string' ? JSON.parse(authorInfoText) : authorInfoText;
 
-						try {
-							// Parse the JSON text into an object
-							authorData = typeof authorInfoText === 'string' ? JSON.parse(authorInfoText) : authorInfoText;
-
-							if (typeof authorData === 'string') {
-								authorData = JSON.parse(authorData);
-							}
-
-							// Only proceed if we have an object
-							if (typeof authorData === 'object' && authorData !== null) {
-								authorData.username = author;
-								await this.syncAuthorData(authorData);
-								migrationState.processedItems++;
-								migrationState.successes.push(author);
-								console.log(`Successfully migrated author: ${author}`);
-							} else {
-								throw new Error(`Invalid author data format: ${typeof authorData}`);
-							}
-						} catch (parseError) {
-							console.error(`Parse error for ${author}:`, parseError);
-							migrationState.errors.push({
-								author,
-								error: `Parse error: ${parseError.message}`,
-								raw: authorInfoText
-							});
+						if (typeof authorData === 'string') {
+							authorData = JSON.parse(authorData);
 						}
-					} else {
-						console.log(`No author_info.json found for ${author}, skipping`);
+
+						if (typeof authorData === 'object' && authorData !== null) {
+							authorData.username = author;
+							await this.syncAuthorData(authorData);
+							migrationState.processedItems++;
+							migrationState.successes.push(author);
+							console.log(`Successfully migrated author: ${author}`);
+						} else {
+							throw new Error(`Invalid author data format: ${typeof authorData}`);
+						}
 					}
 				} catch (authorError) {
 					console.error(`Error migrating author ${author}:`, authorError);
-					// Only add to errors if it wasn't successfully processed
 					if (!migrationState.successes.includes(author)) {
 						migrationState.errors.push({
 							author,
@@ -650,48 +687,48 @@ export class PluginRegistryDO {
 			case '/delete-plugin': {
 				const { authorName, pluginName } = await request.json();
 				const pluginData = this.sql.exec(
-				'SELECT slug FROM plugins WHERE author = ? AND name = ?',
-				authorName, pluginName
+					'SELECT slug FROM plugins WHERE author = ? AND name = ?',
+					authorName, pluginName
 				).first();
-			
+
 				if (!pluginData) {
+					return new Response(JSON.stringify({
+						success: false,
+						message: 'Plugin not found'
+					}), {
+						status: 404,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+
+				this.sql.exec(
+					'DELETE FROM plugins WHERE author = ? AND name = ?',
+					authorName, pluginName
+				);
+
 				return new Response(JSON.stringify({
-					success: false,
-					message: 'Plugin not found'
+					success: true,
+					slug: pluginData.slug
 				}), {
-					status: 404,
 					headers: { 'Content-Type': 'application/json' }
 				});
-				}
-			
-				this.sql.exec(
-				'DELETE FROM plugins WHERE author = ? AND name = ?',
-				authorName, pluginName
-				);
-			
-				return new Response(JSON.stringify({
-				success: true,
-				slug: pluginData.slug
-				}), {
-				headers: { 'Content-Type': 'application/json' }
-				});
 			}
-			
+
 			case '/delete-author': {
 				const { authorName } = await request.json();
-				
+
 				this.sql.exec(
-				'DELETE FROM plugins WHERE author = ?',
-				authorName
+					'DELETE FROM plugins WHERE author = ?',
+					authorName
 				);
-			
+
 				this.sql.exec(
-				'DELETE FROM authors WHERE username = ?',
-				authorName
+					'DELETE FROM authors WHERE username = ?',
+					authorName
 				);
-			
+
 				return new Response(JSON.stringify({ success: true }), {
-				headers: { 'Content-Type': 'application/json' }
+					headers: { 'Content-Type': 'application/json' }
 				});
 			}
 			case '/record-activation': {
@@ -776,6 +813,55 @@ export class PluginRegistryDO {
 // Main worker class
 export default {
 
+	async verifyApiKey(apiKey, env) {
+		try {
+			const id = env.USER_AUTH.idFromName("global");
+			const auth = env.USER_AUTH.get(id);
+
+			const response = await auth.fetch(new Request('http://internal/verify-key', {
+				method: 'POST',
+				body: JSON.stringify({ apiKey })
+			}));
+
+			const result = await response.json();
+			return result.valid;
+		} catch (error) {
+			console.error('API key verification error:', error);
+			return false;
+		}
+	},
+
+	async verifyApiKeyAndUsername(apiKey, username, env) {
+		try {
+			// First check if it's the admin API_SECRET (admins can publish anywhere)
+			if (apiKey === env.API_SECRET) {
+				return true;
+			}
+
+			// For regular users, verify their key and check username match
+			const id = env.USER_AUTH.idFromName("global");
+			const auth = env.USER_AUTH.get(id);
+
+			// API keys are in format username.keyId
+			const [keyUsername] = apiKey.split('.');
+			if (keyUsername !== username) {
+				console.error(`Username mismatch: key=${keyUsername}, requested=${username}`);
+				return false;
+			}
+
+			const response = await auth.fetch(new Request('http://internal/verify-key', {
+				method: 'POST',
+				body: JSON.stringify({ apiKey })
+			}));
+
+			const result = await response.json();
+			return result.valid;
+		} catch (error) {
+			console.error('API key and username verification error:', error);
+			return false;
+		}
+	},
+
 	handleOptions(request) {
 		return new Response(null, {
 			status: 204,
@@ -788,17 +874,38 @@ export default {
 	},
 
 	// Authenticate the request using the stored secret
-	authenticateRequest(request, env) {
+	async authenticateRequest(request, env) {
 		const authHeader = request.headers.get('Authorization');
 		if (!authHeader) {
 			return false;
 		}
 		const [authType, authToken] = authHeader.split(' ');
-		if (authType !== 'Bearer' || authToken !== env.API_SECRET) {
+		if (authType !== 'Bearer') {
 			return false;
 		}
-		return true;
+
+		// Check if it's the admin API_SECRET
+		if (authToken === env.API_SECRET) {
+			return true;
+		}
+
+		// If not admin key, verify against user API keys
+		return await this.verifyApiKey(authToken, env);
 	},
+
+	// Add new handler methods for user management
+	async handleCreateUser(request, env) {
+		const id = env.USER_AUTH.idFromName("global");
+		const auth = env.USER_AUTH.get(id);
+		return await auth.fetch(request);
+	},
+
+	async handleRotateApiKey(request, env) {
+		const id = env.USER_AUTH.idFromName("global");
+		const auth = env.USER_AUTH.get(id);
+		return await auth.fetch(request);
+	},
+
 
 	async scheduled(controller, env, ctx) {
 		try {
@@ -1175,6 +1282,28 @@ export default {
 		try {
 			const { userId, pluginName, fileData, chunkNumber, totalChunks } = await request.json();
 
+			// Get API key from Authorization header
+			const authHeader = request.headers.get('Authorization');
+			if (!authHeader) {
+				return new Response(JSON.stringify({
+					error: 'Missing Authorization header'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+			const [, apiKey] = authHeader.split(' ');
+
+			// Verify API key and username match
+			const isValid = await this.verifyApiKeyAndUsername(apiKey, userId, env);
+			if (!isValid) {
+				return new Response(JSON.stringify({
+					error: 'Unauthorized: Invalid API key or username mismatch'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
 			console.log(`Received chunk ${chunkNumber} of ${totalChunks} for plugin ${pluginName}`);
 
 			const sanitizedPluginName = pluginName.replace(/\s/g, '-');
@@ -1196,9 +1325,12 @@ export default {
 			});
 		} catch (error) {
 			console.error('Chunk upload error:', error);
-			return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
+			return new Response(JSON.stringify({
+				error: 'Internal server error',
+				details: error.message
+			}), {
 				status: 500,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
 		}
 	},
@@ -1207,7 +1339,28 @@ export default {
 	async handleUploadJson(request, env) {
 		try {
 			const { userId, pluginName, jsonData } = await request.json();
+			// Get API key from Authorization header
+			const authHeader = request.headers.get('Authorization');
+			if (!authHeader) {
+				return new Response(JSON.stringify({
+					error: 'Missing Authorization header'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+			const [, apiKey] = authHeader.split(' ');
 
+			// Verify API key and username match
+			const isValid = await this.verifyApiKeyAndUsername(apiKey, userId, env);
+			if (!isValid) {
+				return new Response(JSON.stringify({
+					error: 'Unauthorized: Invalid API key or username mismatch'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
 			console.log(`Received JSON data for plugin: ${pluginName}`);
 
 			const sanitizedPluginName = pluginName.replace(/\s/g, '-');
@@ -1243,9 +1396,12 @@ export default {
 			});
 		} catch (error) {
 			console.error('JSON upload error:', error);
-			return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
+			return new Response(JSON.stringify({
+				error: 'Internal server error',
+				details: error.message
+			}), {
 				status: 500,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
 		}
 	},
@@ -1254,6 +1410,29 @@ export default {
 	async handleFinalizeUpload(request, env) {
 		try {
 			const { userId, pluginName, metadata } = await request.json();
+
+			// Get API key from Authorization header
+			const authHeader = request.headers.get('Authorization');
+			if (!authHeader) {
+				return new Response(JSON.stringify({
+					error: 'Missing Authorization header'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+			const [, apiKey] = authHeader.split(' ');
+
+			// Verify API key and username match
+			const isValid = await this.verifyApiKeyAndUsername(apiKey, userId, env);
+			if (!isValid) {
+				return new Response(JSON.stringify({
+					error: 'Unauthorized: Invalid API key or username mismatch'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
 			const cache = caches.default;
 
 			console.log(`Finalizing upload for plugin: ${pluginName}`);
@@ -1409,9 +1588,12 @@ export default {
 			});
 		} catch (error) {
 			console.error('Finalize upload error:', error);
-			return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
+			return new Response(JSON.stringify({
+				error: 'Internal server error',
+				details: error.message
+			}), {
 				status: 500,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
 		}
 	},
@@ -1478,6 +1660,29 @@ export default {
 		try {
 			const { userId, pluginName, fileName, fileData, assetType } = await request.json();
 
+			// Get API key from Authorization header
+			const authHeader = request.headers.get('Authorization');
+			if (!authHeader) {
+				return new Response(JSON.stringify({
+					error: 'Missing Authorization header'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+			const [, apiKey] = authHeader.split(' ');
+
+			// Verify API key and username match
+			const isValid = await this.verifyApiKeyAndUsername(apiKey, userId, env);
+			if (!isValid) {
+				return new Response(JSON.stringify({
+					error: 'Unauthorized: Invalid API key or username mismatch'
+				}), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+
 			console.log(`Received ${assetType} for plugin: ${pluginName}`);
 
 			const sanitizedPluginName = pluginName.replace(/\s/g, '-');
@@ -1504,10 +1709,13 @@ export default {
 				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
 			});
 		} catch (error) {
-			console.error(`Asset upload error:`, error);
-			return new Response(JSON.stringify({ success: false, error: 'Internal server error', details: error.message }), {
+			console.error('Asset upload error:', error);
+			return new Response(JSON.stringify({
+				error: 'Internal server error',
+				details: error.message
+			}), {
 				status: 500,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
 		}
 	},
@@ -1887,7 +2095,7 @@ export default {
 			return new Response('Internal Server Error', { status: 500 });
 		}
 	},
-	
+
 	async handleActivation(request, env) {
 		try {
 			const url = new URL(request.url);
@@ -1989,7 +2197,7 @@ export default {
 			return new Response('Internal Server Error', { status: 500 });
 		}
 	},
-	
+
 	async handleClearCache(request, env) {
 		try {
 			if (!this.authenticateRequest(request, env)) {
@@ -1998,17 +2206,17 @@ export default {
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
 				});
 			}
-	
+
 			const cache = caches.default;
 			const url = new URL(request.url);
-			
+
 			// List of all domains to clear cache for
 			const domains = [
 				request.headers.get('host'),
 				'pluginpublisher.com'
 				// Add any other domains here
 			];
-	
+
 			// List of URL patterns to clear
 			const urlPatterns = [
 				`/`,
@@ -2019,9 +2227,9 @@ export default {
 				`/authors-list`,
 				`/directory/search*`
 			];
-	
+
 			const clearedKeys = [];
-	
+
 			// Get list of all authors to ensure we clear their specific caches
 			const authorsList = await env.PLUGIN_BUCKET.list();
 			const authors = new Set();
@@ -2031,7 +2239,7 @@ export default {
 					authors.add(parts[0]);
 				}
 			}
-	
+
 			// Clear cache for each domain and pattern combination
 			for (const domain of domains) {
 				for (const pattern of urlPatterns) {
@@ -2041,15 +2249,15 @@ export default {
 							const specificUrl = pattern
 								.replace('*', `${author}`)
 								.replace('//', '/');
-							
+
 							// Clear both HTTP and HTTPS versions
 							const httpsKey = `https://${domain}${specificUrl}`;
 							const httpKey = `http://${domain}${specificUrl}`;
-							
+
 							await cache.delete(httpsKey);
 							await cache.delete(httpKey);
 							clearedKeys.push(httpsKey, httpKey);
-	
+
 							// If it's a directory pattern, also clear plugin-specific caches
 							if (pattern.startsWith('/directory/')) {
 								const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: `${author}/` });
@@ -2059,7 +2267,7 @@ export default {
 										const pluginSlug = pluginParts[1];
 										const httpsPluginUrl = `https://${domain}/directory/${author}/${pluginSlug}`;
 										const httpPluginUrl = `http://${domain}/directory/${author}/${pluginSlug}`;
-										
+
 										await cache.delete(httpsPluginUrl);
 										await cache.delete(httpPluginUrl);
 										clearedKeys.push(httpsPluginUrl, httpPluginUrl);
@@ -2071,14 +2279,14 @@ export default {
 						// For non-wildcard patterns, clear both HTTP and HTTPS versions
 						const httpsKey = `https://${domain}${pattern}`;
 						const httpKey = `http://${domain}${pattern}`;
-						
+
 						await cache.delete(httpsKey);
 						await cache.delete(httpKey);
 						clearedKeys.push(httpsKey, httpKey);
 					}
 				}
 			}
-	
+
 			return new Response(JSON.stringify({
 				success: true,
 				message: 'Cache cleared successfully',
@@ -2104,14 +2312,14 @@ export default {
 		try {
 			const cache = caches.default;
 			const url = new URL(request.url);
-			
+
 			// List of all domains to clear cache for
 			const domains = [
 				request.headers.get('host'),
 				'pluginpublisher.com'
 				// Add any other domains here
 			];
-	
+
 			// List of URL patterns to clear
 			const urlPatterns = [
 				`/`,
@@ -2122,9 +2330,9 @@ export default {
 				`/authors-list`,
 				`/directory/search*`
 			];
-	
+
 			const clearedKeys = [];
-	
+
 			// Get list of all authors to ensure we clear their specific caches
 			const authorsList = await env.PLUGIN_BUCKET.list();
 			const authors = new Set();
@@ -2134,7 +2342,7 @@ export default {
 					authors.add(parts[0]);
 				}
 			}
-	
+
 			// Clear cache for each domain and pattern combination
 			for (const domain of domains) {
 				for (const pattern of urlPatterns) {
@@ -2144,15 +2352,15 @@ export default {
 							const specificUrl = pattern
 								.replace('*', `${author}`)
 								.replace('//', '/');
-							
+
 							// Clear both HTTP and HTTPS versions
 							const httpsKey = `https://${domain}${specificUrl}`;
 							const httpKey = `http://${domain}${specificUrl}`;
-							
+
 							await cache.delete(httpsKey);
 							await cache.delete(httpKey);
 							clearedKeys.push(httpsKey, httpKey);
-	
+
 							// If it's a directory pattern, also clear plugin-specific caches
 							if (pattern.startsWith('/directory/')) {
 								const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: `${author}/` });
@@ -2162,7 +2370,7 @@ export default {
 										const pluginSlug = pluginParts[1];
 										const httpsPluginUrl = `https://${domain}/directory/${author}/${pluginSlug}`;
 										const httpPluginUrl = `http://${domain}/directory/${author}/${pluginSlug}`;
-										
+
 										await cache.delete(httpsPluginUrl);
 										await cache.delete(httpPluginUrl);
 										clearedKeys.push(httpsPluginUrl, httpPluginUrl);
@@ -2182,7 +2390,7 @@ export default {
 					}
 				}
 			}
-	
+
 			return new Response(JSON.stringify({
 				success: true,
 				message: 'Cache cleared successfully'
@@ -2202,6 +2410,88 @@ export default {
 		}
 	},
 
+	async handleDeleteUser(request, env) {
+		try {
+			// This endpoint requires admin API_SECRET
+			const authHeader = request.headers.get('Authorization');
+			if (!authHeader || authHeader !== `Bearer ${env.API_SECRET}`) {
+				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+	
+			// Parse request once
+			const data = await request.json();
+			const { username } = data;
+			
+			if (!username) {
+				return new Response(JSON.stringify({ error: 'Missing username' }), {
+					status: 400,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+	
+			// First delete the user from UserAuthDO
+			const authId = env.USER_AUTH.idFromName("global");
+			const auth = env.USER_AUTH.get(authId);
+			
+			const authResponse = await auth.fetch(new Request('http://internal/delete-user', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ username })
+			}));
+	
+			if (!authResponse.ok) {
+				throw new Error('Failed to delete user authentication data');
+			}
+	
+			// Then delete all their author data and resources
+			const registryId = env.PLUGIN_REGISTRY.idFromName("global");
+			const registry = env.PLUGIN_REGISTRY.get(registryId);
+	
+			const registryResponse = await registry.fetch(new Request('http://internal/delete-author', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ authorName: username })
+			}));
+	
+			if (!registryResponse.ok) {
+				throw new Error('Failed to delete author data');
+			}
+	
+			// Delete all their files from bucket
+			const prefix = `${username}/`;
+			const files = await env.PLUGIN_BUCKET.list({ prefix });
+			for (const file of files.objects) {
+				await env.PLUGIN_BUCKET.delete(file.key);
+			}
+	
+			return new Response(JSON.stringify({
+				success: true,
+				message: `User ${username} and all associated data have been deleted`
+			}), {
+				status: 200,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+			});
+	
+		} catch (error) {
+			console.error('Error deleting user:', error);
+			return new Response(JSON.stringify({
+				success: false,
+				error: 'Internal server error',
+				details: error.message
+			}), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+			});
+		}
+	},
+
 	async fetch(request, env) {
 		const url = new URL(request.url);
 		const path = url.pathname;
@@ -2210,6 +2500,11 @@ export default {
 		const id = env.PLUGIN_REGISTRY.idFromName("global");
 		const registry = env.PLUGIN_REGISTRY.get(id);
 
+		// Special case for user creation - doesn't require API key auth
+		if (path === '/create-user' && request.method === "POST") {
+			return await this.handleCreateUser(request, env);
+		}
+
 		// Handle preflight requests
 		if (request.method === 'OPTIONS') {
 			return this.handleOptions(request);
@@ -2217,7 +2512,7 @@ export default {
 
 		// Authenticate non-GET requests (except search)
 		if (request.method !== 'GET' && path !== '/search') {
-			if (!this.authenticateRequest(request, env)) {
+			if (!await this.authenticateRequest(request, env)) {
 				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
 					status: 401,
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -2259,6 +2554,9 @@ export default {
 					case '/activation-count': {
 						return this.getActivationCount(request, env);
 					}
+					case '/register': {
+						return generateRegisterHTML();
+					}					
 					case '/search': {
 						const searchQuery = url.searchParams.get('q') || '';
 						const searchTags = url.searchParams.getAll('tag');
@@ -2345,41 +2643,40 @@ export default {
 					}
 					case '/delete-plugin': {
 						try {
-						  const { authorName, pluginName } = await request.json();
-						  const response = await removePlugin(authorName, pluginName, env);
-						  return new Response(JSON.stringify(response), {
-							status: response.success ? 200 : 400,
-							headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-						  });
+							const { authorName, pluginName } = await request.json();
+							const response = await removePlugin(authorName, pluginName, env);
+							return new Response(JSON.stringify(response), {
+								status: response.success ? 200 : 400,
+								headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+							});
 						} catch (error) {
-						  return new Response(JSON.stringify({
-							success: false,
-							message: 'Failed to delete plugin'
-						  }), {
-							status: 500,
-							headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-						  });
+							return new Response(JSON.stringify({
+								success: false,
+								message: 'Failed to delete plugin'
+							}), {
+								status: 500,
+								headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+							});
 						}
-					  }
-					  
-					  case '/delete-author': {
+					}
+					case '/delete-author': {
 						try {
-						  const { authorName } = await request.json();
-						  const response = await removeAuthor(authorName, env);
-						  return new Response(JSON.stringify(response), {
-							status: response.success ? 200 : 400,
-							headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-						  });
+							const { authorName } = await request.json();
+							const response = await removeAuthor(authorName, env);
+							return new Response(JSON.stringify(response), {
+								status: response.success ? 200 : 400,
+								headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+							});
 						} catch (error) {
-						  return new Response(JSON.stringify({
-							success: false,
-							message: 'Failed to delete author'
-						  }), {
-							status: 500,
-							headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
-						  });
+							return new Response(JSON.stringify({
+								success: false,
+								message: 'Failed to delete author'
+							}), {
+								status: 500,
+								headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+							});
 						}
-					  }
+					}
 					case '/migrate-authors': {
 						const id = env.PLUGIN_REGISTRY.idFromName("global");
 						const registry = env.PLUGIN_REGISTRY.get(id);
@@ -2434,6 +2731,15 @@ export default {
 					}
 					case '/clear-cache': {
 						return this.handleClearCache(request, env);
+					}
+					case '/create-user': {
+						return await this.handleCreateUser(request, env);
+					}
+					case '/delete-user': {
+						return this.handleDeleteUser(request, env);
+					}					
+					case '/rotate-key': {
+						return await this.handleRotateApiKey(request, env);
 					}
 					default: {
 						return new Response(JSON.stringify({ error: 'Invalid endpoint' }), {

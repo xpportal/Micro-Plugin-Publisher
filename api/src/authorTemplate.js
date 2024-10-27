@@ -63,7 +63,7 @@ export default function generateAuthorHTML(authorData) {
 	<body>
 	<div class="min-h-screen bg-[#191919] text-white">
 		  		  			${createHeaderSearchBar()}
-		<div class="bg-gradient-to-r from-purple-500 to-blue-400 pb-0 pt-0 hero-card-container-outer mx-0 px-0">
+		<div class="bg-gradient-to-r from-purple-500 to-purple-900 pb-0 pt-0 hero-card-container-outer mx-0 px-0">
 		<div class="container mx-auto px-0 pb-2">
 			<div class="asset-card-author rounded-b-3xl p-8 mb-8 shadow-2xl transform min-h-[200px]">
 			<div class="flex flex-col md:flex-row items-center md:items-start">

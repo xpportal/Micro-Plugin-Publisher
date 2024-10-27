@@ -57,7 +57,7 @@ export default async function generateSearchHTML(results, query = '', tags = [],
 		<div class="min-h-screen bg-[#191919] text-white">
 			  		  			${createHeaderSearchBar()}
 			<!-- Hero section with search -->
-			<div class="bg-gradient-to-r from-purple-500 to-blue-400 py-16">
+			<div class="bg-gradient-to-r from-purple-500 to-purple-900 py-16">
 				<div class="container mx-auto px-4">
 					<h1 class="text-4xl font-bold text-center mb-8">
 						${query

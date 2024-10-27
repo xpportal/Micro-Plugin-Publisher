@@ -1,7 +1,7 @@
 name = "micro-plugin-publisher"
 main = "src/worker.js"
-compatibility_date = "2024-10-25"  # Update to today's date
-compatibility_flags = ["nodejs_compat"]  # Use this instead of node_compat
+compatibility_date = "2024-10-25"
+compatibility_flags = ["nodejs_compat"]
 account_id = "95d5ca589c39bf4189b080cfc8417c8e"
 
 kv_namespaces = [
@@ -21,9 +21,19 @@ crons = ["*/5 * * * *"]
 name = "PLUGIN_REGISTRY"
 class_name = "PluginRegistryDO"
 
+[[durable_objects.bindings]]
+name = "USER_AUTH"
+class_name = "UserAuthDO"
+
+# Keep the existing migration for PluginRegistryDO
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PluginRegistryDO"]
+
+# Add a new migration just for UserAuthDO
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["UserAuthDO"]
 
 [vars]
 PLUGIN_BUCKET_URL = "https://micro-plugin-publisher.95d5ca589c39bf4189b080cfc8417c8e.r2.cloudflarestorage.com"

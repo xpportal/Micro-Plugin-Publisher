@@ -207,9 +207,10 @@ head_sampling_rate = 1
 [triggers]
 crons = ["*/5 * * * *"]
 
-[[durable_objects.bindings]]
-name = "PLUGIN_REGISTRY"
-class_name = "PluginRegistryDO"
+durable_objects.bindings = [
+  { name = "PLUGIN_REGISTRY", class_name = "PluginRegistryDO" },
+  { name = "USER_AUTH", class_name = "UserAuthDO" } 
+]
 
 [[migrations]]
 tag = "v1"
@@ -275,10 +276,34 @@ echo "Worker deployed successfully."
 echo "Setting API secret..."
 echo "$api_secret" | npx wrangler secret put API_SECRET > /dev/null 2>&1
 if [ $? -ne 0 ]; then
-    echo "Error setting API secret."
-    exit 1
+	echo "Error setting API secret."
+	exit 1
 fi
 echo "API secret set successfully."
+
+# Generate a secure random master salt (64 hex characters)
+user_key_salt=$(openssl rand -hex 32)
+echo "Generated master salt: $user_key_salt"
+
+# Set the secrets
+echo "$user_key_salt" | npx wrangler secret put USER_KEY_SALT > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+	echo "Error setting USER_KEY_SALT."
+	exit 1
+fi
+echo "USER_KEY_SALT set successfully."
+
+# Prompt user to set a default invite code
+read -p "Enter a default invite code: " invite_code
+
+echo "Generated invite code: $invite_code"
+
+echo "$invite_code" | npx wrangler secret put INVITE_CODE > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+	echo "Error setting INVITE_CODE."
+	exit 1
+fi
+echo "INVITE_CODE set successfully."
 
 # Deploy worker again to ensure latest changes
 echo "Redeploying worker to ensure latest changes..."
