@@ -122,13 +122,14 @@ export default async function generatePluginHTML(pluginData, env) {
           </div>
         </div>
         <div class="bg-black py-8">
-          <div class="container mx-auto px-4 text-center text-gray-200">
-			<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
-            <p>
-              <a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
-              <a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a>
-            </p>
-          </div>
+			<div class="container mx-auto px-4 text-center text-gray-200">
+				<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
+				<a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
+				<a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a> |
+				<a href="https://github.com/xpportal/Micro-Plugin-Publisher" class="text-purple-400 hover:underline">
+					Source Code
+				</a>
+			</div>
         </div>
       </div>
     </body>

@@ -1887,179 +1887,7 @@ export default {
 			return new Response('Internal Server Error', { status: 500 });
 		}
 	},
-
-	async handleClearCache(request, env) {
-		try {
-			if (!this.authenticateRequest(request, env)) {
-				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-					status: 401,
-					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-				});
-			}
-
-			const cache = caches.default;
-			const url = new URL(request.url);
-			const host = request.headers.get('host');
-
-			// List of URL patterns to clear
-			const urlPatterns = [
-				`/`,
-				`/directory/*`,
-				`/plugin-data*`,
-				`/author/*`,
-				`/author-data*`,
-				`/authors-list`,
-				`/directory/search*`
-			];
-
-			const clearedKeys = [];
-
-			// Get list of all authors to ensure we clear their specific caches
-			const authorsList = await env.PLUGIN_BUCKET.list();
-			const authors = new Set();
-			for (const item of authorsList.objects) {
-				const parts = item.key.split('/');
-				if (parts.length > 1) {
-					authors.add(parts[0]);
-				}
-			}
-
-			// Clear cache for each pattern and author combination
-			for (const pattern of urlPatterns) {
-				if (pattern.includes('*')) {
-					// For wildcard patterns, we need to specifically clear author-related caches
-					for (const author of authors) {
-						const specificUrl = pattern
-							.replace('*', `${author}`)
-							.replace('//', '/');
-						const cacheKey = `https://${host}${specificUrl}`;
-						await cache.delete(cacheKey);
-						clearedKeys.push(cacheKey);
-
-						// If it's a directory pattern, also clear plugin-specific caches
-						if (pattern.startsWith('/directory/')) {
-							const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: `${author}/` });
-							for (const plugin of pluginsList.objects) {
-								const pluginParts = plugin.key.split('/');
-								if (pluginParts.length === 3 && pluginParts[2].endsWith('.json')) {
-									const pluginSlug = pluginParts[1];
-									const pluginUrl = `https://${host}/directory/${author}/${pluginSlug}`;
-									await cache.delete(pluginUrl);
-									clearedKeys.push(pluginUrl);
-								}
-							}
-						}
-					}
-				} else {
-					// For non-wildcard patterns, simply clear the cache
-					const cacheKey = `https://${host}${pattern}`;
-					await cache.delete(cacheKey);
-					clearedKeys.push(cacheKey);
-				}
-			}
-
-			return new Response(JSON.stringify({
-				success: true,
-				message: 'Cache cleared successfully',
-				clearedKeys
-			}), {
-				status: 200,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-			});
-		} catch (error) {
-			console.error('Cache clear error:', error);
-			return new Response(JSON.stringify({
-				success: false,
-				error: 'Internal server error',
-				details: error.message
-			}), {
-				status: 500,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-			});
-		}
-	},
-	async handleClearCacheGet(request, env) {
-		try {
-			const cache = caches.default;
-			const url = new URL(request.url);
-			const host = request.headers.get('host');
-
-			// List of URL patterns to clear
-			const urlPatterns = [
-				`/`,
-				`/directory/*`,
-				`/plugin-data*`,
-				`/author/*`,
-				`/author-data*`,
-				`/authors-list`,
-				`/directory/search*`
-			];
-
-			const clearedKeys = [];
-
-			// Get list of all authors to ensure we clear their specific caches
-			const authorsList = await env.PLUGIN_BUCKET.list();
-			const authors = new Set();
-			for (const item of authorsList.objects) {
-				const parts = item.key.split('/');
-				if (parts.length > 1) {
-					authors.add(parts[0]);
-				}
-			}
-
-			// Clear cache for each pattern and author combination
-			for (const pattern of urlPatterns) {
-				if (pattern.includes('*')) {
-					// For wildcard patterns, we need to specifically clear author-related caches
-					for (const author of authors) {
-						const specificUrl = pattern
-							.replace('*', `${author}`)
-							.replace('//', '/');
-						const cacheKey = `https://${host}${specificUrl}`;
-						await cache.delete(cacheKey);
-						clearedKeys.push(cacheKey);
-
-						// If it's a directory pattern, also clear plugin-specific caches
-						if (pattern.startsWith('/directory/')) {
-							const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: `${author}/` });
-							for (const plugin of pluginsList.objects) {
-								const pluginParts = plugin.key.split('/');
-								if (pluginParts.length === 3 && pluginParts[2].endsWith('.json')) {
-									const pluginSlug = pluginParts[1];
-									const pluginUrl = `https://${host}/directory/${author}/${pluginSlug}`;
-									await cache.delete(pluginUrl);
-									clearedKeys.push(pluginUrl);
-								}
-							}
-						}
-					}
-				} else {
-					// For non-wildcard patterns, simply clear the cache
-					const cacheKey = `https://${host}${pattern}`;
-					await cache.delete(cacheKey);
-					clearedKeys.push(cacheKey);
-				}
-			}
-
-			return new Response(JSON.stringify({
-				success: true,
-				message: 'Cache cleared successfully'
-			}), {
-				status: 200,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-			});
-		} catch (error) {
-			console.error('Cache clear error:', error);
-			return new Response(JSON.stringify({
-				success: false,
-				error: 'Internal server error',
-			}), {
-				status: 500,
-				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-			});
-		}
-	},
-
+	
 	async handleActivation(request, env) {
 		try {
 			const url = new URL(request.url);
@@ -2159,6 +1987,218 @@ export default {
 		} catch (error) {
 			console.error('Homepage error:', error);
 			return new Response('Internal Server Error', { status: 500 });
+		}
+	},
+	
+	async handleClearCache(request, env) {
+		try {
+			if (!this.authenticateRequest(request, env)) {
+				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+					status: 401,
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+				});
+			}
+	
+			const cache = caches.default;
+			const url = new URL(request.url);
+			
+			// List of all domains to clear cache for
+			const domains = [
+				request.headers.get('host'),
+				'pluginpublisher.com'
+				// Add any other domains here
+			];
+	
+			// List of URL patterns to clear
+			const urlPatterns = [
+				`/`,
+				`/directory/*`,
+				`/plugin-data*`,
+				`/author/*`,
+				`/author-data*`,
+				`/authors-list`,
+				`/directory/search*`
+			];
+	
+			const clearedKeys = [];
+	
+			// Get list of all authors to ensure we clear their specific caches
+			const authorsList = await env.PLUGIN_BUCKET.list();
+			const authors = new Set();
+			for (const item of authorsList.objects) {
+				const parts = item.key.split('/');
+				if (parts.length > 1) {
+					authors.add(parts[0]);
+				}
+			}
+	
+			// Clear cache for each domain and pattern combination
+			for (const domain of domains) {
+				for (const pattern of urlPatterns) {
+					if (pattern.includes('*')) {
+						// For wildcard patterns, we need to specifically clear author-related caches
+						for (const author of authors) {
+							const specificUrl = pattern
+								.replace('*', `${author}`)
+								.replace('//', '/');
+							
+							// Clear both HTTP and HTTPS versions
+							const httpsKey = `https://${domain}${specificUrl}`;
+							const httpKey = `http://${domain}${specificUrl}`;
+							
+							await cache.delete(httpsKey);
+							await cache.delete(httpKey);
+							clearedKeys.push(httpsKey, httpKey);
+	
+							// If it's a directory pattern, also clear plugin-specific caches
+							if (pattern.startsWith('/directory/')) {
+								const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: `${author}/` });
+								for (const plugin of pluginsList.objects) {
+									const pluginParts = plugin.key.split('/');
+									if (pluginParts.length === 3 && pluginParts[2].endsWith('.json')) {
+										const pluginSlug = pluginParts[1];
+										const httpsPluginUrl = `https://${domain}/directory/${author}/${pluginSlug}`;
+										const httpPluginUrl = `http://${domain}/directory/${author}/${pluginSlug}`;
+										
+										await cache.delete(httpsPluginUrl);
+										await cache.delete(httpPluginUrl);
+										clearedKeys.push(httpsPluginUrl, httpPluginUrl);
+									}
+								}
+							}
+						}
+					} else {
+						// For non-wildcard patterns, clear both HTTP and HTTPS versions
+						const httpsKey = `https://${domain}${pattern}`;
+						const httpKey = `http://${domain}${pattern}`;
+						
+						await cache.delete(httpsKey);
+						await cache.delete(httpKey);
+						clearedKeys.push(httpsKey, httpKey);
+					}
+				}
+			}
+	
+			return new Response(JSON.stringify({
+				success: true,
+				message: 'Cache cleared successfully',
+				clearedKeys
+			}), {
+				status: 200,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		} catch (error) {
+			console.error('Cache clear error:', error);
+			return new Response(JSON.stringify({
+				success: false,
+				error: 'Internal server error',
+				details: error.message
+			}), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		}
+	},
+	// Separate get handler that can be controled on public facing cache clears.
+	async handleClearCacheGet(request, env) {
+		try {
+			const cache = caches.default;
+			const url = new URL(request.url);
+			
+			// List of all domains to clear cache for
+			const domains = [
+				request.headers.get('host'),
+				'pluginpublisher.com'
+				// Add any other domains here
+			];
+	
+			// List of URL patterns to clear
+			const urlPatterns = [
+				`/`,
+				`/directory/*`,
+				`/plugin-data*`,
+				`/author/*`,
+				`/author-data*`,
+				`/authors-list`,
+				`/directory/search*`
+			];
+	
+			const clearedKeys = [];
+	
+			// Get list of all authors to ensure we clear their specific caches
+			const authorsList = await env.PLUGIN_BUCKET.list();
+			const authors = new Set();
+			for (const item of authorsList.objects) {
+				const parts = item.key.split('/');
+				if (parts.length > 1) {
+					authors.add(parts[0]);
+				}
+			}
+	
+			// Clear cache for each domain and pattern combination
+			for (const domain of domains) {
+				for (const pattern of urlPatterns) {
+					if (pattern.includes('*')) {
+						// For wildcard patterns, we need to specifically clear author-related caches
+						for (const author of authors) {
+							const specificUrl = pattern
+								.replace('*', `${author}`)
+								.replace('//', '/');
+							
+							// Clear both HTTP and HTTPS versions
+							const httpsKey = `https://${domain}${specificUrl}`;
+							const httpKey = `http://${domain}${specificUrl}`;
+							
+							await cache.delete(httpsKey);
+							await cache.delete(httpKey);
+							clearedKeys.push(httpsKey, httpKey);
+	
+							// If it's a directory pattern, also clear plugin-specific caches
+							if (pattern.startsWith('/directory/')) {
+								const pluginsList = await env.PLUGIN_BUCKET.list({ prefix: `${author}/` });
+								for (const plugin of pluginsList.objects) {
+									const pluginParts = plugin.key.split('/');
+									if (pluginParts.length === 3 && pluginParts[2].endsWith('.json')) {
+										const pluginSlug = pluginParts[1];
+										const httpsPluginUrl = `https://${domain}/directory/${author}/${pluginSlug}`;
+										const httpPluginUrl = `http://${domain}/directory/${author}/${pluginSlug}`;
+										
+										await cache.delete(httpsPluginUrl);
+										await cache.delete(httpPluginUrl);
+										clearedKeys.push(httpsPluginUrl, httpPluginUrl);
+									}
+								}
+							}
+						}
+					} else {
+						// For non-wildcard patterns, clear both HTTP and HTTPS versions
+						const httpsKey = `https://${domain}${pattern}`;
+						const httpKey = `http://${domain}${pattern}`;
+						// remote the root key as it is not needed.
+						await cache.delete(`https://${request.headers.get('host')}/`);
+						await cache.delete(httpsKey);
+						await cache.delete(httpKey);
+						clearedKeys.push(httpsKey, httpKey);
+					}
+				}
+			}
+	
+			return new Response(JSON.stringify({
+				success: true,
+				message: 'Cache cleared successfully'
+			}), {
+				status: 200,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		} catch (error) {
+			console.error('Cache clear error:', error);
+			return new Response(JSON.stringify({
+				success: false,
+				error: 'Internal server error'
+			}), {
+				status: 500,
+				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
 		}
 	},
 

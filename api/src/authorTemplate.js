@@ -145,7 +145,10 @@ export default function generateAuthorHTML(authorData) {
 			<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
 			<p>
 				<a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
-				<a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a>
+				<a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a> |
+				<a href="https://github.com/xpportal/Micro-Plugin-Publisher" class="text-purple-400 hover:underline">
+					Source Code
+				</a>
 			</p>
 			</div>
 		</div>

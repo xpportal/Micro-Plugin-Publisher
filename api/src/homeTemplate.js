@@ -6,6 +6,7 @@ export default async function generateHomeHTML(authors, env) {
     const html = `
     <!DOCTYPE html>
     <html lang="en">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
     <head>
         <title>Plugin Publisher - Discover Amazing Plugins</title>
         <link 
@@ -27,9 +28,9 @@ export default async function generateHomeHTML(authors, env) {
             <div class="bg-gradient-to-r from-purple-500 to-blue-400 py-32">
                 <div class="container mx-auto px-4 text-center">
 					<a href="/" class="mr-4 justify-center flex items-center">
-					<img src="${mainLogo}" alt="Logo" style="height: 150px; margin-bottom: 20px;">
+					<img src="${mainLogo}" alt="Logo" style="max-height: 150px; width: auto; margin-bottom: 20px;">
 					</a>
-                    <p class="text-xl mb-8">Find the perfect plugin for your needs from a curated collection of wonderful contributors.</p>
+                    <p class="text-xl mb-8">Find the perfect plugin for your needs from a curated collection.</p>
                     <div class="max-w-3xl mx-auto">
                         <form action="/directory/search" method="GET" class="flex gap-2">
                             <input 
@@ -96,6 +97,18 @@ export default async function generateHomeHTML(authors, env) {
                     </div>
                 </div>
             </div>
+			        <div class="bg-black py-8">
+			<div class="container mx-auto px-4 text-center text-gray-200">
+				<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
+				<p>
+				<a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
+				<a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a> |
+				<a href="https://github.com/xpportal/Micro-Plugin-Publisher" class="text-purple-400 hover:underline">
+					Source Code
+				</a>
+				</p>
+			</div>
+        </div>
         </div>
     </body>
     </html>
