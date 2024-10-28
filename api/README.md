@@ -485,7 +485,7 @@ For users who need to recover access, the system provides a secure GitHub-based 
      - File content matches expected format
    - Returns new API key upon successful verification
 
-   ![Roll Key Gist Example](../docs/assets/roll-key-screenshot.jpg)
+![Roll Key Gist Example](../docs/assets/roll-key-screenshot.jpg)
 
 
 
