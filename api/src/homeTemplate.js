@@ -32,7 +32,7 @@ export default async function generateHomeHTML(authors, env) {
 					</a>
                     <p class="text-xl mb-8">Find the perfect plugin for your needs from a curated collection.</p>
                     <div class="max-w-3xl mx-auto">
-                        <form action="/directory/search" method="GET" class="flex gap-2">
+                        <form action="/directory/search" method="GET" class="flex gap-2" autocomplete="off">
                             <input 
                                 type="text" 
                                 name="q" 
