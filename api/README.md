@@ -246,51 +246,103 @@ The system also provides a browser-friendly search interface at /directory/searc
 ![Micro Plugin Publisher Search](../docs/assets/micro-plugin-publisher-search-page.jpg)
 
 
-### Database Schema
+# Database Schema and Storage
 
-The SQLite database contains three main tables:
+The system uses a combination of SQLite databases (via Durable Objects) and Cloudflare KV for data management. Here's the current structure:
+
+## Database Schema
+
+### Plugin Registry (PluginRegistryDO)
 
 ```sql
 -- Plugin metadata table
 CREATE TABLE plugins (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  author TEXT NOT NULL,
-  slug TEXT NOT NULL,
-  name TEXT NOT NULL,
-  short_description TEXT,
-  version TEXT NOT NULL,
-  download_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(author, slug)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    short_description TEXT,
+    version TEXT NOT NULL,
+    download_count INTEGER DEFAULT 0,
+    activation_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    icons_1x TEXT,
+    icons_2x TEXT,
+    banners_high TEXT,
+    banners_low TEXT,
+    UNIQUE(author, slug)
 );
 
 -- Plugin tags for search
 CREATE TABLE plugin_tags (
-  plugin_id INTEGER,
-  tag TEXT NOT NULL,
-  FOREIGN KEY(plugin_id) REFERENCES plugins(id),
-  PRIMARY KEY(plugin_id, tag)
+    plugin_id INTEGER,
+    tag TEXT NOT NULL,
+    FOREIGN KEY(plugin_id) REFERENCES plugins(id),
+    PRIMARY KEY(plugin_id, tag)
 );
 
--- Download tracking queue
-CREATE TABLE download_queue (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  plugin_id INTEGER,
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  processed BOOLEAN DEFAULT FALSE,
-  FOREIGN KEY(plugin_id) REFERENCES plugins(id)
+-- Authors table
+CREATE TABLE authors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT,
+    avatar_url TEXT,
+    bio TEXT,
+    member_since TIMESTAMP,
+    website TEXT,
+    twitter TEXT,
+    github TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-### Initial Database Setup
+### User Authentication (UserAuthDO)
 
-After deploying, you'll need to migrate your existing plugins to the SQLite database:
+```sql
+-- Users table
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL,
+    github_username TEXT,
+    key_id TEXT NOT NULL UNIQUE,
+    key_hash TEXT NOT NULL,
+    invite_code_used TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_key_rotation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-```bash
-# Migrate existing data from R2 to SQLite
-curl -X POST https://your-worker.workers.dev/migrate-data \
-  -H "Authorization: Bearer YOUR_API_KEY"
+-- Key roll verification table
+CREATE TABLE key_roll_verifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    verification_token TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN DEFAULT 0,
+    FOREIGN KEY(username) REFERENCES users(username)
+);
+```
+
+## Download Tracking
+
+The system uses Cloudflare KV for download and activation tracking:
+- Each download/activation is recorded in KV with a 1-hour expiration
+- A scheduled worker processes the queue periodically and updates the database
+- Rate limiting is enforced at 5 downloads per hour per IP/plugin combination
+- The system maintains consistency through atomic updates via Durable Objects
+
+## Search Performance
+
+The following indexes are maintained for optimal performance:
+
+```sql
+CREATE INDEX idx_plugins_search ON plugins(name, short_description);
+CREATE INDEX idx_plugins_downloads ON plugins(download_count DESC);
+CREATE INDEX idx_authors_username ON authors(username);
+CREATE INDEX idx_users_key_id ON users(key_id);
 ```
 
 ### Download Tracking
