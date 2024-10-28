@@ -1026,12 +1026,10 @@ export default {
 
 		if (!response) {
 			try {
-				console.log('Author data:', author);
 				const authorData = await this.fetchAuthorPageData(author, env);
 				if (!authorData) {
 					return new Response('Author not found', { status: 404 });
 				}
-				console.log(JSON.stringify(authorData));
 				response = await generateAuthorHTML(authorData, env, request);
 
 				// Cache the response

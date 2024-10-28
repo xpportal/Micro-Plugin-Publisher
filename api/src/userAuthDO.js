@@ -2,16 +2,15 @@ export class UserAuthDO {
 	constructor(state, env) {
 		this.state = state;
 		this.env = env;
-		this.sql = state.storage.sql;
-
+		this.sql = state.storage.sql;  // This is correct
+		
 		if (!env.USER_KEY_SALT) {
 			throw new Error('Missing required secret: USER_KEY_SALT');
 		}
-
+	
 		this.initializeSchema();
 	}
-
-
+		
 	async initializeSchema() {
 		try {
 			await this.sql.exec(`
@@ -88,27 +87,25 @@ export class UserAuthDO {
 	}
 
 	// Create a new user account
-	async createUser(username, github_username, email, inviteCode) {
+	async createUser(username, inviteCode, github_username, email) {
 		try {
 			const existingUser = await this.sql.exec(
-				"SELECT * FROM users WHERE username = ? OR github_username = ? OR email = ?",
-				username, github_username, email
-			).one();
-
-			console.log("Existing user:", existingUser);
-
-			if (existingUser) {
-				throw new Error('Username, GitHub username, or email already taken');
+				"SELECT 1 FROM users WHERE username = ?",
+				[username]
+			).toArray();
+	
+			if (existingUser.length > 0) {
+				throw new Error('Username already taken');
 			}
-
+	
 			if (!this.env.INVITE_CODE || inviteCode !== this.env.INVITE_CODE) {
 				throw new Error('Invalid invite code');
 			}
-
+	
 			const keyId = this.generateKeyId();
 			const keyHash = await this.generateApiKey(keyId);
-
-			await this.sql.exec(`
+	
+			const query = `
 				INSERT INTO users (
 					username,
 					github_username,
@@ -117,31 +114,18 @@ export class UserAuthDO {
 					key_hash,
 					invite_code_used,
 					created_at
-				) VALUES (
-					?,
-					?,
-					?,
-					?,
-					?,
-					?,
-					CURRENT_TIMESTAMP
-				)`,
-				username,
-				github_username,
-				email,
-				keyId,
-				keyHash,
-				inviteCode
-			);
-
+				) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+	
+			// Pass each parameter individually
+			await this.sql.exec(query, username, github_username, email, keyId, keyHash, inviteCode);
+	
 			return { username, keyId, keyHash, apiKey: `${username}.${keyId}` };
 		} catch (error) {
 			console.error(error);
 			throw error;
 		}
 	}
-
-	async updateUserAsAdmin(username, updates) {
+		async updateUserAsAdmin(username, updates) {
 		try {
 			// Check if github_username column exists, add it if it doesn't
 			const columns = await this.sql.exec(`PRAGMA table_info(users)`).toArray();
@@ -448,7 +432,7 @@ export class UserAuthDO {
 
 			switch (url.pathname) {
 				case '/create-user': {
-					const { username, inviteCode } = body;
+					const { username, inviteCode, github_username, email  } = body;
 					if (!username || !inviteCode) {
 						return new Response(JSON.stringify({
 							error: 'Missing required fields'
@@ -456,7 +440,7 @@ export class UserAuthDO {
 					}
 
 					try {
-						const result = await this.createUser(username, inviteCode);
+						const result = await this.createUser(username, inviteCode, github_username, email);
 						return new Response(JSON.stringify(result));
 					} catch (error) {
 						return new Response(JSON.stringify({
