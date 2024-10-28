@@ -49,11 +49,26 @@ Before you begin, ensure you have the following:
 
 The `wrangler.toml` file in your project directory contains the configuration for your worker and R2 bucket. Key configurations include:
 
-- `name`: The name of your worker
-- `main`: The entry point of your worker code
-- `compatibility_date`: The compatibility date for the worker
-- `PLUGIN_BUCKET_URL`: The URL of your R2 bucket (automatically set during setup)
-- `bucket_name`: The name of your R2 bucket
+- `name`: The name of your worker (`micro-plugin-publisher`)
+- `main`: The entry point of your worker code (`src/worker.js`)
+- `compatibility_date`: The date for compatibility (`2024-10-25`)
+- `compatibility_flags`: Flags for compatibility (`["nodejs_compat"]`)
+- `account_id`: Your Cloudflare account ID (`95d5ca589c39bf4189b080cfc8417c8e`)
+
+### KV Namespaces
+- `DOWNLOAD_COUNTS`:
+- `DOWNLOAD_RATELIMIT`:
+- `DOWNLOAD_QUEUE`:
+
+### Durable Objects used for Plugin Registry and Auth database.
+- `PLUGIN_REGISTRY`: Class name (`PluginRegistryDO`)
+- `USER_AUTH`: Class name (`UserAuthDO`)
+
+### Variables
+- `PLUGIN_BUCKET_URL`: The URL of your R2 bucket
+
+### R2 Buckets
+- `PLUGIN_BUCKET`: Bucket name for plugin storage
 
 ## Usage
 
@@ -469,6 +484,10 @@ For users who need to recover access, the system provides a secure GitHub-based 
      - Verification token is valid and not expired
      - File content matches expected format
    - Returns new API key upon successful verification
+
+   ![Roll Key Gist Example](../docs/assets/roll-key-screenshot.jpg)
+
+
 
 ### User Authentication Endpoints
 
