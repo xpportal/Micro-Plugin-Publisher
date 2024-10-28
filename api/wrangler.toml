@@ -25,12 +25,10 @@ class_name = "PluginRegistryDO"
 name = "USER_AUTH"
 class_name = "UserAuthDO"
 
-# Keep the existing migration for PluginRegistryDO
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PluginRegistryDO"]
 
-# Add a new migration just for UserAuthDO
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["UserAuthDO"]
