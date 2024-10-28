@@ -650,7 +650,7 @@ Contributions to improve the Plugin Publishing System are welcome. Please submit
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+This api will use an open license, its just in development and I need advice from folks more focused on this area of open source. <3 Assume GPL with the aim for MIT.
 
 ## Support
 
