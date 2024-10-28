@@ -5,814 +5,23 @@ import generateAuthorHTML from './authorTemplate';
 import generateSearchHTML from './searchTemplate';
 import generateHomeHTML from './homeTemplate';
 import generateRegisterHTML from './registrationTemplate';
+import generateRequestKeyRollHTML from './rollKeyTemplate';
 import { UserAuthDO } from './userAuthDO';
+import { PluginRegistryDO } from './PluginRegistryDO';
+
 import { removeAuthor, removePlugin } from './management';
 
-export { UserAuthDO };
+export { UserAuthDO, PluginRegistryDO };
 
-// Define CORS headers
+// Define CORS
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
 	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-
-export class PluginRegistryDO {
-	constructor(state, env) {
-		this.state = state;
-		this.env = env;
-
-		// Initialize SQLite storage
-		this.sql = state.storage.sql;
-
-		// Initialize the database schema
-		this.initializeSchema();
-	}
-
-	async addMissingColumns() {
-		try {
-			const columns = this.sql.exec(`PRAGMA table_info(plugins)`).toArray();
-			console.log('Current table schema before adding columns:', columns);
-
-			const columnNames = columns.map(col => col.name);
-
-			const columnsToAdd = [
-				{ name: 'icons_1x', type: 'TEXT' },
-				{ name: 'icons_2x', type: 'TEXT' },
-				{ name: 'banners_high', type: 'TEXT' },
-				{ name: 'banners_low', type: 'TEXT' },
-				{ name: 'activation_count', type: 'INTEGER DEFAULT 0' }
-			];
-
-			for (const column of columnsToAdd) {
-				if (!columnNames.includes(column.name)) {
-					console.log(`Adding column ${column.name}`);
-					await this.sql.exec(`
-						ALTER TABLE plugins 
-						ADD COLUMN ${column.name} ${column.type}
-					`);
-				}
-			}
-
-			// Verify columns were added
-			const updatedColumns = this.sql.exec(`PRAGMA table_info(plugins)`).toArray();
-			console.log('Updated table schema:', updatedColumns);
-
-		} catch (error) {
-			console.error("Error adding missing columns:", error);
-			throw error; // Re-throw to handle in the caller
-		}
-	}
-
-	async syncAuthorData(authorData) {
-		try {
-			if (typeof authorData !== 'object' || authorData === null) {
-				throw new Error(`Invalid author data type: ${typeof authorData}`);
-			}
-
-			const result = await this.sql.exec(`
-				INSERT INTO authors (
-					username, email, avatar_url, bio, 
-					member_since, website, twitter, github
-				) 
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-				ON CONFLICT(username) DO UPDATE SET
-					email = EXCLUDED.email,
-					avatar_url = EXCLUDED.avatar_url,
-					bio = EXCLUDED.bio,
-					member_since = EXCLUDED.member_since,
-					website = EXCLUDED.website,
-					twitter = EXCLUDED.twitter,
-					github = EXCLUDED.github,
-					updated_at = CURRENT_TIMESTAMP
-				RETURNING id
-			`,
-				authorData.username,
-				authorData.email,
-				authorData.avatar_url,
-				authorData.bio,
-				authorData.member_since,
-				authorData.website,
-				authorData.twitter,
-				authorData.github
-			).one();
-
-			console.log(`Successfully synced author ${authorData.username}, id: ${result?.id}`);
-			return result.id;
-		} catch (error) {
-			console.error("Error syncing author data:", error);
-			error.data = authorData; // Attach the data for debugging
-			throw error;
-		}
-	}
-
-	async initializeSchema() {
-		try {
-			// Create tables if they don't exist
-			this.sql.exec(`
-				-- Plugin metadata table
-				CREATE TABLE IF NOT EXISTS plugins (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					author TEXT NOT NULL,
-					slug TEXT NOT NULL,
-					name TEXT NOT NULL,
-					short_description TEXT,
-					version TEXT NOT NULL,
-					download_count INTEGER DEFAULT 0,
-					activation_count INTEGER DEFAULT 0,
-					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-					UNIQUE(author, slug)
-				);
-							
-				-- Plugin tags for search
-				CREATE TABLE IF NOT EXISTS plugin_tags (
-					plugin_id INTEGER,
-					tag TEXT NOT NULL,
-					FOREIGN KEY(plugin_id) REFERENCES plugins(id),
-					PRIMARY KEY(plugin_id, tag)
-				);
-				
-				-- Create indexes for search performance
-				CREATE INDEX IF NOT EXISTS idx_plugins_search 
-				ON plugins(name, short_description);
-				
-				CREATE INDEX IF NOT EXISTS idx_plugins_downloads
-				ON plugins(download_count DESC);
-			`);
-
-			// Add authors table
-			this.sql.exec(`
-				CREATE TABLE IF NOT EXISTS authors (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					username TEXT NOT NULL UNIQUE,
-					email TEXT,
-					avatar_url TEXT,
-					bio TEXT,
-					member_since TIMESTAMP,
-					website TEXT,
-					twitter TEXT,
-					github TEXT,
-					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-					updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-				);
-	
-				-- Index for quick lookups
-				CREATE INDEX IF NOT EXISTS idx_authors_username 
-				ON authors(username);
-			`);
-
-
-			// Now add any missing columns
-			await this.addMissingColumns();
-
-			// Drop the unnecessary queue tables if they exist
-			this.sql.exec(`
-				DROP TABLE IF EXISTS download_queue;
-				DROP TABLE IF EXISTS activation_queue;
-			`);
-
-		} catch (error) {
-			console.error("Error initializing schema:", error);
-			throw error;
-		}
-	}
-
-	async recordActivation(author, slug) {
-		// Just verify the plugin exists
-		const plugin = this.sql.exec(
-			"SELECT id FROM plugins WHERE author = ? AND slug = ?",
-			author, slug
-		).one();
-
-		if (!plugin) return false;
-		return true;
-	}
-
-	async migrateExistingData() {
-		try {
-			console.log("Starting data migration...");
-
-			// Track migration progress
-			const migrationState = {
-				schemaUpdated: false,
-				processedItems: 0,
-				errors: []
-			};
-
-			// Add missing columns first
-			await this.addMissingColumns();
-			migrationState.schemaUpdated = true;
-
-			// Get list of all objects in bucket
-			const list = await this.env.PLUGIN_BUCKET.list();
-			const authors = new Set();
-			const pluginsToMigrate = [];
-
-			// First pass: collect all authors and plugin metadata files
-			for (const item of list.objects) {
-				const parts = item.key.split('/').filter(part => part.length > 0); // Remove empty parts
-				if (parts.length > 1) {
-					authors.add(parts[0]); // Add author
-					if (parts.length === 3 && parts[2].endsWith('.json') && !parts[2].includes('author_info')) {
-						pluginsToMigrate.push({
-							author: parts[0],
-							slug: parts[1],
-							jsonKey: item.key
-						});
-					}
-				}
-			}
-
-			console.log(`Found ${pluginsToMigrate.length} plugins to migrate`);
-
-			// Use proper transaction API
-			await this.state.storage.transaction(async (txn) => {
-				// Process each plugin
-				for (const plugin of pluginsToMigrate) {
-					try {
-						console.log(`Processing plugin: ${plugin.author}/${plugin.slug}`);
-						const jsonObject = await this.env.PLUGIN_BUCKET.get(plugin.jsonKey);
-						if (!jsonObject) {
-							console.log(`No JSON data found for ${plugin.jsonKey}`);
-							continue;
-						}
-
-						const pluginData = JSON.parse(await jsonObject.text());
-						const pluginInfo = Array.isArray(pluginData) ? pluginData[0] : pluginData;
-
-						// Insert plugin with the correct number of values matching the columns
-						const result = await this.sql.exec(`
-							INSERT OR REPLACE INTO plugins (
-								author,
-								slug,
-								name,
-								short_description,
-								icons_1x,
-								icons_2x,
-								banners_high,
-								banners_low,
-								version,
-								download_count,
-								activation_count,
-								created_at,
-								updated_at
-							) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-							RETURNING id
-						`,
-							plugin.author,
-							plugin.slug,
-							pluginInfo.name || plugin.slug,
-							pluginInfo.short_description || '',
-							pluginInfo.icons?.['1x'] || '',
-							pluginInfo.icons?.['2x'] || '',
-							pluginInfo.banners?.high || '',
-							pluginInfo.banners?.low || '',
-							pluginInfo.version || '1.0.0',
-							0, // Initial download count
-							0  // Initial activation count
-						).one();
-
-						// If plugin has tags, insert them
-						if (pluginInfo.tags && Array.isArray(pluginInfo.tags)) {
-							for (const tag of pluginInfo.tags) {
-								await this.sql.exec(
-									"INSERT OR IGNORE INTO plugin_tags (plugin_id, tag) VALUES (?, ?)",
-									result.id,
-									tag
-								);
-							}
-						}
-
-						migrationState.processedItems++;
-						console.log(`Successfully migrated plugin: ${plugin.author}/${plugin.slug}`);
-					} catch (pluginError) {
-						console.error(`Error migrating plugin ${plugin.author}/${plugin.slug}:`, pluginError);
-						migrationState.errors.push({
-							plugin: `${plugin.author}/${plugin.slug}`,
-							error: pluginError.message
-						});
-					}
-				}
-			});
-
-			return {
-				success: true,
-				schemaUpdated: migrationState.schemaUpdated,
-				processedItems: migrationState.processedItems,
-				errors: migrationState.errors,
-				message: migrationState.errors.length > 0
-					? 'Migration completed with some warnings'
-					: 'Migration completed successfully'
-			};
-		} catch (error) {
-			console.error("Migration error:", error);
-			return {
-				success: false,
-				error: error.message,
-				schemaUpdated: true,
-				message: 'Migration failed but schema may have been updated'
-			};
-		}
-	}
-
-	// Handle search requests
-	async handleSearch(query = '', tags = [], limit = 20, offset = 0) {
-		try {
-			// Handle empty query case
-			const whereClause = query ?
-				`WHERE (name LIKE ? OR short_description LIKE ? OR author LIKE ?)` :
-				'WHERE 1=1';
-
-			const tagFilters = tags.length > 0 ?
-				`AND id IN (
-					SELECT plugin_id FROM plugin_tags 
-					WHERE tag IN (${tags.map(() => '?').join(',')})
-					GROUP BY plugin_id 
-					HAVING COUNT(DISTINCT tag) = ${tags.length}
-				)` : '';
-
-			const params = query ?
-				[...query.split(' ').flatMap(term => [`%${term}%`, `%${term}%`, `%${term}%`]), ...tags, limit, offset] :
-				[...tags, limit, offset];
-
-			// Log the query and params for debugging
-			console.log('Search Query:', `
-				SELECT DISTINCT p.*, 
-					(
-						SELECT GROUP_CONCAT(tag) 
-						FROM plugin_tags 
-						WHERE plugin_id = p.id
-					) as tags
-				FROM plugins p
-				${whereClause}
-				${tagFilters}
-				ORDER BY download_count DESC, updated_at DESC
-				LIMIT ? OFFSET ?
-			`);
-			console.log('Search Params:', params);
-
-			// Use toArray() instead of one() since we want multiple results
-			// This is the key change - toArray() handles empty results gracefully
-			const results = this.sql.exec(`
-				SELECT DISTINCT p.*, 
-					(
-						SELECT GROUP_CONCAT(tag) 
-						FROM plugin_tags 
-						WHERE plugin_id = p.id
-					) as tags
-				FROM plugins p
-				${whereClause}
-				${tagFilters}
-				ORDER BY download_count DESC, updated_at DESC
-				LIMIT ? OFFSET ?
-			`, ...params).toArray();
-
-			// Return empty array if no results
-			return results || [];
-
-		} catch (error) {
-			console.error('Search error:', error);
-			// Return empty array on error instead of throwing
-			return [];
-		}
-	}
-
-
-	// Record a download
-	async recordDownload(author, slug) {
-		const plugin = this.sql.exec(
-			"SELECT id FROM plugins WHERE author = ? AND slug = ?",
-			author, slug
-		).one();
-
-		if (!plugin) return false;
-
-		// Add to download queue
-		this.sql.exec(
-			"INSERT INTO download_queue (plugin_id) VALUES (?)",
-			plugin.id
-		);
-
-		return true;
-	}
-
-	// Process download queue (called periodically)
-	async processDownloadQueue() {
-		await this.state.storage.transaction(async (txn) => {
-			// Get unprocessed downloads grouped by plugin
-			const downloads = this.sql.exec(`
-			SELECT plugin_id, COUNT(*) as count 
-			FROM download_queue 
-			WHERE processed = FALSE 
-			GROUP BY plugin_id
-		  `).toArray();
-
-			// Update download counts
-			for (const { plugin_id, count } of downloads) {
-				this.sql.exec(`
-			  UPDATE plugins 
-			  SET download_count = download_count + ?, 
-				  updated_at = CURRENT_TIMESTAMP 
-			  WHERE id = ?
-			`, count, plugin_id);
-			}
-
-			// Mark downloads as processed
-			this.sql.exec(`
-			UPDATE download_queue 
-			SET processed = TRUE 
-			WHERE processed = FALSE
-		  `);
-		});
-	}
-
-	async updateDownloadCount(author, slug, count) {
-		await this.sql.exec(`
-            UPDATE plugins 
-            SET 
-                download_count = download_count + ?,
-                updated_at = CURRENT_TIMESTAMP 
-            WHERE author = ? AND slug = ?
-        `, count, author, slug);
-	}
-
-	async processQueues() {
-		await this.state.storage.transaction(async (txn) => {
-			// Process downloads
-			const downloads = this.sql.exec(`
-				SELECT plugin_id, COUNT(*) as count 
-				FROM download_queue 
-				WHERE processed = FALSE 
-				GROUP BY plugin_id
-			`).toArray();
-
-			// Process activations
-			const activations = this.sql.exec(`
-				SELECT plugin_id, COUNT(*) as count 
-				FROM activation_queue 
-				WHERE processed = FALSE 
-				GROUP BY plugin_id
-			`).toArray();
-
-			// Update download counts
-			for (const { plugin_id, count } of downloads) {
-				this.sql.exec(`
-					UPDATE plugins 
-					SET download_count = download_count + ?,
-						updated_at = CURRENT_TIMESTAMP 
-					WHERE id = ?
-				`, count, plugin_id);
-			}
-
-			// Update activation counts
-			for (const { plugin_id, count } of activations) {
-				this.sql.exec(`
-					UPDATE plugins 
-					SET activation_count = activation_count + ?,
-						updated_at = CURRENT_TIMESTAMP 
-					WHERE id = ?
-				`, count, plugin_id);
-			}
-
-			// Mark both queues as processed
-			this.sql.exec(`
-				UPDATE download_queue 
-				SET processed = TRUE 
-				WHERE processed = FALSE
-			`);
-
-			this.sql.exec(`
-				UPDATE activation_queue 
-				SET processed = TRUE 
-				WHERE processed = FALSE
-			`);
-		});
-	}
-
-	async updateCounts(updates, activations) {
-		await this.state.storage.transaction(async (txn) => {
-			// Process download updates
-			for (const [key, count] of updates) {
-				const [author, slug] = key.split(':');
-				await this.sql.exec(`
-					UPDATE plugins 
-					SET download_count = download_count + ?,
-						updated_at = CURRENT_TIMESTAMP 
-					WHERE author = ? AND slug = ?
-				`, count, author, slug);
-			}
-
-			// Process activation updates
-			for (const [key, count] of activations) {
-				const [author, slug] = key.split(':');
-				await this.sql.exec(`
-					UPDATE plugins 
-					SET activation_count = activation_count + ?,
-						updated_at = CURRENT_TIMESTAMP 
-					WHERE author = ? AND slug = ?
-				`, count, author, slug);
-			}
-		});
-
-		// Log the updates for debugging
-		console.log('Updated download counts:', updates);
-		console.log('Updated activation counts:', activations);
-	}
-
-	async migrateExistingAuthors() {
-		try {
-			console.log("Starting author migration...");
-
-			const migrationState = {
-				processedItems: 0,
-				errors: [],
-				successes: []
-			};
-
-			// First, get all users from the users table
-			const users = await this.sql.exec(`
-			SELECT username FROM users
-		  `).toArray();
-
-			// Create a set of existing users
-			const existingUsers = new Set(users.map(u => u.username));
-
-			// List all directories in the bucket
-			const list = await this.env.PLUGIN_BUCKET.list();
-			const authorDirectories = new Set();
-
-			for (const item of list.objects) {
-				const parts = item.key.split('/');
-				if (parts.length > 0) {
-					authorDirectories.add(parts[0]);
-				}
-			}
-
-			console.log(`Found ${authorDirectories.size} potential authors to migrate`);
-
-			// Process each author directory
-			for (const author of authorDirectories) {
-				try {
-					const authorInfoKey = `${author}/author_info.json`;
-					const authorInfoObject = await this.env.PLUGIN_BUCKET.get(authorInfoKey);
-
-					// If no author_info.json exists and this is a valid user, create it
-					if (!authorInfoObject && existingUsers.has(author)) {
-						const authorInfo = {
-							username: author,
-							email: "",
-							avatar_url: "https://assets.pluginpublisher.com/default_pfp.jpg",
-							bio: "",
-							member_since: new Date().toISOString(),
-							website: "",
-							twitter: "",
-							github: "",
-							plugins: []
-						};
-
-						// Store new author_info.json
-						await this.env.PLUGIN_BUCKET.put(authorInfoKey, JSON.stringify(authorInfo, null, 2), {
-							httpMetadata: {
-								contentType: 'application/json',
-							},
-						});
-
-						// Add to authors table if not exists
-						await this.sql.exec(`
-				  INSERT OR IGNORE INTO authors (
-					username,
-					email,
-					avatar_url,
-					bio,
-					member_since,
-					website,
-					twitter,
-					github
-				  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-				`, author, "", authorInfo.avatar_url, "", authorInfo.member_since, "", "", "");
-
-						migrationState.processedItems++;
-						migrationState.successes.push(author);
-						console.log(`Created new author_info.json for user: ${author}`);
-						continue;
-					}
-
-					// Handle existing author_info.json files
-					if (authorInfoObject) {
-						const authorInfoText = await authorInfoObject.text();
-						let authorData = typeof authorInfoText === 'string' ? JSON.parse(authorInfoText) : authorInfoText;
-
-						if (typeof authorData === 'string') {
-							authorData = JSON.parse(authorData);
-						}
-
-						if (typeof authorData === 'object' && authorData !== null) {
-							authorData.username = author;
-							await this.syncAuthorData(authorData);
-							migrationState.processedItems++;
-							migrationState.successes.push(author);
-							console.log(`Successfully migrated author: ${author}`);
-						} else {
-							throw new Error(`Invalid author data format: ${typeof authorData}`);
-						}
-					}
-				} catch (authorError) {
-					console.error(`Error migrating author ${author}:`, authorError);
-					if (!migrationState.successes.includes(author)) {
-						migrationState.errors.push({
-							author,
-							error: authorError.message
-						});
-					}
-				}
-			}
-
-			const successMessage = migrationState.successes.length > 0
-				? `Successfully migrated authors: ${migrationState.successes.join(', ')}`
-				: 'No authors were successfully migrated';
-
-			const errorMessage = migrationState.errors.length > 0
-				? `Warnings for authors: ${migrationState.errors.map(e => e.author).join(', ')}`
-				: 'No errors encountered';
-
-			return {
-				success: migrationState.processedItems > 0,
-				processedItems: migrationState.processedItems,
-				successfulAuthors: migrationState.successes,
-				errors: migrationState.errors,
-				message: `${successMessage}. ${errorMessage}`
-			};
-
-		} catch (error) {
-			console.error("Author migration error:", error);
-			return {
-				success: false,
-				error: error.message,
-				message: 'Author migration failed'
-			};
-		}
-	}
-
-	async fetch(request) {
-		if (request.method === "GET") {
-			return new Response("Method not allowed", { status: 405 });
-		}
-
-		const url = new URL(request.url);
-
-		switch (url.pathname) {
-			case '/update-counts': {
-				const body = await request.json();
-				const updates = new Map(body.updates);
-				const activations = new Map(body.activations);
-				await this.updateCounts(updates, activations);
-				return new Response(JSON.stringify({ success: true }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/search': {
-				const body = await request.json();
-				const query = body.query || '';
-				const tags = body.tags || [];
-				const limit = parseInt(body.limit || 20);
-				const offset = parseInt(body.offset || 0);
-
-				const results = await this.handleSearch(query, tags, limit, offset);
-				return new Response(JSON.stringify(results), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/delete-plugin': {
-				const { authorName, pluginName } = await request.json();
-				const pluginData = this.sql.exec(
-					'SELECT slug FROM plugins WHERE author = ? AND name = ?',
-					authorName, pluginName
-				).first();
-
-				if (!pluginData) {
-					return new Response(JSON.stringify({
-						success: false,
-						message: 'Plugin not found'
-					}), {
-						status: 404,
-						headers: { 'Content-Type': 'application/json' }
-					});
-				}
-
-				this.sql.exec(
-					'DELETE FROM plugins WHERE author = ? AND name = ?',
-					authorName, pluginName
-				);
-
-				return new Response(JSON.stringify({
-					success: true,
-					slug: pluginData.slug
-				}), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-
-			case '/delete-author': {
-				const { authorName } = await request.json();
-
-				this.sql.exec(
-					'DELETE FROM plugins WHERE author = ?',
-					authorName
-				);
-
-				this.sql.exec(
-					'DELETE FROM authors WHERE username = ?',
-					authorName
-				);
-
-				return new Response(JSON.stringify({ success: true }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/record-activation': {
-				const { author, slug } = await request.json();
-				const success = await this.recordActivation(author, slug);
-				return new Response(JSON.stringify({ success }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/sync-author': {
-				const authorData = await request.json();
-				await this.syncAuthorData(authorData);
-				return new Response(JSON.stringify({ success: true }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/migrate-authors': {
-				const migrationResult = await this.migrateExistingAuthors();
-				return new Response(JSON.stringify(migrationResult), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/process-queues': {
-				await this.processQueues();
-				return new Response(JSON.stringify({ success: true }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/list-authors': {
-				try {
-					const authors = await this.sql.exec(`
-						SELECT 
-							a.*,
-							COUNT(DISTINCT p.id) as plugin_count,
-							SUM(p.download_count) as total_downloads,
-							SUM(p.activation_count) as total_activations
-						FROM authors a
-						LEFT JOIN plugins p ON p.author = a.username
-						GROUP BY a.id
-						ORDER BY total_downloads DESC, a.updated_at DESC
-					`).toArray();
-
-					return new Response(JSON.stringify(authors), {
-						headers: { 'Content-Type': 'application/json' }
-					});
-				} catch (error) {
-					console.error('Error listing authors:', error);
-					return new Response(JSON.stringify({ error: 'Internal server error' }), {
-						status: 500,
-						headers: { 'Content-Type': 'application/json' }
-					});
-				}
-			}
-			case '/migrate-data': {
-				const migrationResult = await this.migrateExistingData();
-				return new Response(JSON.stringify(migrationResult), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/record-download': {
-				const { author, slug } = await request.json();
-				const success = await this.recordDownload(author, slug);
-				return new Response(JSON.stringify({ success }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			case '/update-download-count': {
-				const { author, slug, count } = await request.json();
-				await this.updateDownloadCount(author, slug, count);
-				return new Response(JSON.stringify({ success: true }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			default:
-				return new Response("Not found", { status: 404 });
-		}
-	}
-
-}
-
-
 // Main worker class
 export default {
-
 	async verifyApiKey(apiKey, env) {
 		try {
 			const id = env.USER_AUTH.idFromName("global");
@@ -838,7 +47,7 @@ export default {
 				return true;
 			}
 
-			// For regular users, verify their key and check username match
+			// For other users, verify their key and check username match
 			const id = env.USER_AUTH.idFromName("global");
 			const auth = env.USER_AUTH.get(id);
 
@@ -893,20 +102,21 @@ export default {
 		return await this.verifyApiKey(authToken, env);
 	},
 
-	// Add new handler methods for user management
+	// Handle Create User
 	async handleCreateUser(request, env) {
 		const id = env.USER_AUTH.idFromName("global");
 		const auth = env.USER_AUTH.get(id);
 		return await auth.fetch(request);
 	},
 
+	// Handle Rotate API Key
 	async handleRotateApiKey(request, env) {
 		const id = env.USER_AUTH.idFromName("global");
 		const auth = env.USER_AUTH.get(id);
 		return await auth.fetch(request);
 	},
 
-
+	// The sheduled function to process download and activation queues.
 	async scheduled(controller, env, ctx) {
 		try {
 			if (!env.DOWNLOAD_COUNTS || !env.PLUGIN_REGISTRY) {
@@ -1046,7 +256,7 @@ export default {
 				expirationTtl: 3600
 			});
 
-			// Update running total in KV
+			// Update running total in KV...maybe remove this soon.
 			const currentCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
 			await env.DOWNLOAD_COUNTS.put(downloadKey, (currentCount + 1).toString());
 
@@ -1110,7 +320,6 @@ export default {
 		}
 	},
 
-	// Handle GET /plugin-data
 	// Handle GET /plugin-data
 	async handleGetPluginData(request, env) {
 		try {
@@ -1361,7 +570,6 @@ export default {
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-			console.log(`Received JSON data for plugin: ${pluginName}`);
 
 			const sanitizedPluginName = pluginName.replace(/\s/g, '-');
 			const folderName = `${userId}`;
@@ -1387,8 +595,6 @@ export default {
 					contentType: 'application/json',
 				},
 			});
-
-			console.log('Successfully stored JSON data');
 
 			return new Response(JSON.stringify({ success: true, message: 'JSON uploaded successfully' }), {
 				status: 200,
@@ -1553,7 +759,6 @@ export default {
 			const updateResponse = await registry.fetch(updateRequest);
 			if (!updateResponse.ok) {
 				console.error('Failed to update SQLite database:', await updateResponse.text());
-				// Continue anyway since the file upload was successful
 			}
 
 			const zipUrl = `${objectKey}`;
@@ -1616,8 +821,6 @@ export default {
 				parsedAuthorData = JSON.parse(authorData);
 			}
 
-			console.log(`Received author info for plugin: ${pluginName}`);
-
 			const authorInfoKey = `${userId}/author_info.json`;
 
 			await env.PLUGIN_BUCKET.put(authorInfoKey, JSON.stringify(parsedAuthorData, null, 2), {
@@ -1625,8 +828,6 @@ export default {
 					contentType: 'application/json',
 				},
 			});
-
-			console.log('Successfully stored author info');
 
 			const cache = caches.default;
 
@@ -1750,8 +951,6 @@ export default {
 			if (parts.length === 3 && parts[2] === `${parts[1]}.json`) {
 				const jsonData = await env.PLUGIN_BUCKET.get(item.key);
 				const pluginData = JSON.parse(await jsonData.text());
-
-				console.log(`Plugin data for ${item.key}:`, pluginData);
 
 				plugins.push({
 					slug: pluginData[0].slug,
@@ -1893,7 +1092,6 @@ export default {
 				if (parts.length === 3 && parts[2] === `${parts[1]}.json`) {
 					const jsonData = await env.PLUGIN_BUCKET.get(item.key);
 					const pluginData = JSON.parse(await jsonData.text());
-					console.log(`Plugin data for ${item.key}:`, pluginData);
 					// Preserve the original structure of the plugin data
 					plugins.push({
 						...pluginData[0],
@@ -1911,7 +1109,6 @@ export default {
 		}
 	},
 
-	// Add this new function to your worker class
 	async handleVersionCheck(request, env) {
 		try {
 			const url = new URL(request.url);
@@ -2198,6 +1395,7 @@ export default {
 		}
 	},
 
+	// This is gross, refactor later...
 	async handleClearCache(request, env) {
 		try {
 			if (!this.authenticateRequest(request, env)) {
@@ -2213,7 +1411,7 @@ export default {
 			// List of all domains to clear cache for
 			const domains = [
 				request.headers.get('host'),
-				'pluginpublisher.com'
+				'pluginpublisher.com' // Replace with your configured domain.
 				// Add any other domains here
 			];
 
@@ -2307,7 +1505,8 @@ export default {
 			});
 		}
 	},
-	// Separate get handler that can be controled on public facing cache clears.
+
+	// Separate get handler that can be controled on public facing cache clears. @todo remove this later. Needed until I have a better way to control cache clears.
 	async handleClearCacheGet(request, env) {
 		try {
 			const cache = caches.default;
@@ -2412,7 +1611,7 @@ export default {
 
 	async handleDeleteUser(request, env) {
 		try {
-			// This endpoint requires admin API_SECRET
+			// This endpont requires admin API_SECRET
 			const authHeader = request.headers.get('Authorization');
 			if (!authHeader || authHeader !== `Bearer ${env.API_SECRET}`) {
 				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -2420,22 +1619,22 @@ export default {
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-	
+
 			// Parse request once
 			const data = await request.json();
 			const { username } = data;
-			
+
 			if (!username) {
 				return new Response(JSON.stringify({ error: 'Missing username' }), {
 					status: 400,
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-	
+
 			// First delete the user from UserAuthDO
 			const authId = env.USER_AUTH.idFromName("global");
 			const auth = env.USER_AUTH.get(authId);
-			
+
 			const authResponse = await auth.fetch(new Request('http://internal/delete-user', {
 				method: 'POST',
 				headers: {
@@ -2443,15 +1642,15 @@ export default {
 				},
 				body: JSON.stringify({ username })
 			}));
-	
+
 			if (!authResponse.ok) {
 				throw new Error('Failed to delete user authentication data');
 			}
-	
+
 			// Then delete all their author data and resources
 			const registryId = env.PLUGIN_REGISTRY.idFromName("global");
 			const registry = env.PLUGIN_REGISTRY.get(registryId);
-	
+
 			const registryResponse = await registry.fetch(new Request('http://internal/delete-author', {
 				method: 'POST',
 				headers: {
@@ -2459,18 +1658,18 @@ export default {
 				},
 				body: JSON.stringify({ authorName: username })
 			}));
-	
+
 			if (!registryResponse.ok) {
 				throw new Error('Failed to delete author data');
 			}
-	
+
 			// Delete all their files from bucket
 			const prefix = `${username}/`;
 			const files = await env.PLUGIN_BUCKET.list({ prefix });
 			for (const file of files.objects) {
 				await env.PLUGIN_BUCKET.delete(file.key);
 			}
-	
+
 			return new Response(JSON.stringify({
 				success: true,
 				message: `User ${username} and all associated data have been deleted`
@@ -2478,7 +1677,7 @@ export default {
 				status: 200,
 				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
-	
+
 		} catch (error) {
 			console.error('Error deleting user:', error);
 			return new Response(JSON.stringify({
@@ -2505,13 +1704,33 @@ export default {
 			return await this.handleCreateUser(request, env);
 		}
 
+		if (path === '/request-key-roll' && request.method === "POST") {
+
+			const { username, email } = await request.json();
+			console.log(`Requesting API key roll for ${username} (${email})`);
+
+			const id = env.USER_AUTH.idFromName("global");
+			const auth = env.USER_AUTH.get(id);
+
+			// Create a new request with the parsed body data
+			const internalRequest = new Request('http://internal/request-key-roll', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ username, email })
+			});
+
+			return await auth.fetch(internalRequest);
+		}
+
 		// Handle preflight requests
 		if (request.method === 'OPTIONS') {
 			return this.handleOptions(request);
 		}
 
-		// Authenticate non-GET requests (except search)
-		if (request.method !== 'GET' && path !== '/search') {
+		// Authenticate non-GET requests (except certain public endpoints)
+		if (request.method !== 'GET' && !['/search', '/initiate-key-roll', '/verify-key-roll'].includes(path)) {
 			if (!await this.authenticateRequest(request, env)) {
 				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
 					status: 401,
@@ -2556,7 +1775,19 @@ export default {
 					}
 					case '/register': {
 						return generateRegisterHTML();
-					}					
+					}
+					case '/roll-api-key': {
+						if (url.searchParams.has('token')) {
+							return generateRollKeyHTML();
+						}
+						return generateRequestKeyRollHTML();
+					}
+					case '/roll-key-with-token': {
+						const { token } = await request.json();
+						const id = env.USER_AUTH.idFromName("global");
+						const auth = env.USER_AUTH.get(id);
+						return await auth.fetch(request);
+					}
 					case '/search': {
 						const searchQuery = url.searchParams.get('q') || '';
 						const searchTags = url.searchParams.getAll('tag');
@@ -2659,6 +1890,56 @@ export default {
 							});
 						}
 					}
+					case '/initiate-key-roll': {
+						const { username, email } = await request.json();
+						if (!username || !email) {
+							return new Response(JSON.stringify({
+								error: 'Missing required fields'
+							}), {
+								status: 400,
+								headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+							});
+						}
+
+						const id = env.USER_AUTH.idFromName("global");
+						const auth = env.USER_AUTH.get(id);
+
+						const internalRequest = new Request('http://internal/initiate-key-roll', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json'
+							},
+							body: JSON.stringify({ username, email })
+						});
+
+						return await auth.fetch(internalRequest);
+					}
+
+					case '/verify-key-roll': {
+						const { gistUrl, verificationToken } = await request.json();
+						if (!gistUrl || !verificationToken) {
+							return new Response(JSON.stringify({
+								error: 'Missing required fields'
+							}), {
+								status: 400,
+								headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+							});
+						}
+
+						const id = env.USER_AUTH.idFromName("global");
+						const auth = env.USER_AUTH.get(id);
+
+						const internalRequest = new Request('http://internal/verify-key-roll', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json'
+							},
+							body: JSON.stringify({ gistUrl, verificationToken })
+						});
+
+						return await auth.fetch(internalRequest);
+					}
+
 					case '/delete-author': {
 						try {
 							const { authorName } = await request.json();
@@ -2737,9 +2018,33 @@ export default {
 					}
 					case '/delete-user': {
 						return this.handleDeleteUser(request, env);
-					}					
+					}
 					case '/rotate-key': {
 						return await this.handleRotateApiKey(request, env);
+					}
+					case '/admin-update-user': {
+						const id = env.USER_AUTH.idFromName("global");
+						const auth = env.USER_AUTH.get(id);
+
+						// Verify API key at the worker level
+						const authHeader = request.headers.get('Authorization');
+						if (!authHeader || authHeader !== `Bearer ${env.API_SECRET}`) {
+							return new Response(JSON.stringify({
+								error: 'Unauthorized'
+							}), { status: 401 });
+						}
+
+						// Create internal request with admin flag @todo maybe this can be different in the future.
+						const internalRequest = new Request('http://internal/admin-update-user', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'X-Admin-Secret': env.API_SECRET
+							},
+							body: JSON.stringify(await request.json())
+						});
+
+						return await auth.fetch(internalRequest);
 					}
 					default: {
 						return new Response(JSON.stringify({ error: 'Invalid endpoint' }), {

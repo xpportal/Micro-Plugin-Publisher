@@ -3,7 +3,7 @@ import { createHeaderSearchBar } from './headerSearchBar';
 export default async function generateHomeHTML(authors, env) {
 	const mainLogo = 'https://pub-2ef6bc2ae372488daf94a858e2b752ac.r2.dev/main-logo.png';
 
-    const html = `
+	const html = `
     <!DOCTYPE html>
     <html lang="en">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -114,9 +114,9 @@ export default async function generateHomeHTML(authors, env) {
     </html>
     `;
 
-    return new Response(html, {
-        headers: {
-            'Content-Type': 'text/html',
-        },
-    });
+	return new Response(html, {
+		headers: {
+			'Content-Type': 'text/html',
+		},
+	});
 }

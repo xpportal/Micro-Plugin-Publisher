@@ -1,7 +1,7 @@
 export default async function generateRegisterHTML() {
-    const mainLogo = 'https://assets.pluginpublisher.com/main-logo.png';
-    
-    const html = `
+	const mainLogo = 'https://assets.pluginpublisher.com/main-logo.png';
+
+	const html = `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -36,15 +36,16 @@ export default async function generateRegisterHTML() {
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({
-                            username: form.username.value,
-                            inviteCode: form.inviteCode.value
-                        })
+						body: JSON.stringify({
+							username: form.username.value,
+							github_username: form.github_username.value,
+							inviteCode: form.inviteCode.value
+						})
                     });
                     
                     const data = await response.json();
-					console.log("datertots", data);
-                    if (!response.ok) {
+
+					if (!response.ok) {
                         throw new Error(data.error || 'Registration failed');
                     }
                     
@@ -115,7 +116,30 @@ BUCKET_URL=https://assets.pluginpublisher.com\`;
                                     placeholder="Enter your invite code"
                                 >
                             </div>
-                            
+                            <div>
+								<label for="email" class="block text-sm font-medium mb-2">Email Address</label>
+								<input
+									type="email"
+									id="email"
+									name="email"
+									required
+									class="w-full px-4 py-2 rounded bg-gray-800 border border-gray-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition"
+									placeholder="Your email address"
+								>
+							</div>
+
+							<div>
+								<label for="github_username" class="block text-sm font-medium mb-2">GitHub Username</label>
+								<input
+									type="text"
+									id="github_username"
+									name="github_username"
+									required
+									class="w-full px-4 py-2 rounded bg-gray-800 border border-gray-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition"
+									placeholder="Your GitHub username"
+								>
+							</div>
+
                             <div id="error-message" class="text-red-500 text-sm min-h-[20px]"></div>
                             <div id="success-message" class="text-green-500 text-sm min-h-[20px]"></div>
                             
@@ -139,9 +163,9 @@ BUCKET_URL=https://assets.pluginpublisher.com\`;
     </html>
     `;
 
-    return new Response(html, {
-        headers: {
-            'Content-Type': 'text/html',
-        },
-    });
+	return new Response(html, {
+		headers: {
+			'Content-Type': 'text/html',
+		},
+	});
 }

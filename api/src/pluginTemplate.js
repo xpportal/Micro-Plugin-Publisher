@@ -1,11 +1,10 @@
 import { createSecureHtmlService } from './secureHtmlService';
-// In generatePluginHTML.js
 import { createHeaderSearchBar } from './headerSearchBar';
 
 export default async function generatePluginHTML(pluginData, env) {
 	const secureHtmlService = createSecureHtmlService();
 	// Sanitize the input data
-	const safePlugin = secureHtmlService.sanitizePluginData(pluginData); // Remove env parameter here
+	const safePlugin = secureHtmlService.sanitizePluginData(pluginData);
 	console.log("datertots", JSON.stringify(pluginData));
 	if (!safePlugin) {
 		return new Response('Invalid plugin data', { status: 400 });
