@@ -37,7 +37,7 @@ Example
 
 1. Clone this repository into your Local WP add-ons directory:
    ```
-   git clone git@github.com:xpportal/Micro-Plugin-Publisher.git
+   git clone git@github.com:xpportal/Plugin-Publisher.git
    ```
    ### Clone Locations
 

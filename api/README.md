@@ -648,10 +648,6 @@ For system administrators:
 
 Contributions to improve the Plugin Publishing System are welcome. Please submit issues and pull requests on the project's GitHub repository.
 
-## License
-
-This api will use an open license, its just in development and I need advice from folks more focused on this area of open source. <3 Assume GPL with the aim for MIT.
-
 ## Support
 
 If you encounter issues or need assistance:
