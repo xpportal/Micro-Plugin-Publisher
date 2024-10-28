@@ -1,14 +1,15 @@
 // searchTemplate.js
 import { createSearchBar } from './searchBar';
+import { createHeaderSearchBar } from './headerSearchBar';
 import { createSecureHtmlService } from './secureHtmlService';
 
-export default async function generateSearchHTML(results, query = '', tags = [], offset = 0, limit = 20, env) {
+export default async function generateSearchHTML(results, query = '', tags = [], offset = 0, limit = 20, env, request) {
 	const secureHtmlService = createSecureHtmlService();
 	const safeResults = await results.map(plugin => secureHtmlService.sanitizePluginData(plugin, env));
 	const totalResults = results.length;
 	const hasMore = totalResults === limit;
 	const currentPage = Math.floor(offset / limit) + 1;
-	const searchBar = createSearchBar(query, tags);
+	const searchBar = createSearchBar(query, tags, request);
 	console.log("ENV", env);
 	const defaultBanner = await env.PLUGIN_BUCKET.get('banner-1500x620.jpg');
 	const defaultIcon = await env.PLUGIN_BUCKET.get('icon-256x256.jpg');
@@ -34,8 +35,6 @@ export default async function generateSearchHTML(results, query = '', tags = [],
     </div>
   </div>
 `;
-	console.log("safety!", safeResults);
-
 
 	const html = `
 	<!DOCTYPE html>
@@ -56,15 +55,31 @@ export default async function generateSearchHTML(results, query = '', tags = [],
 	</head>
 	<body>
 		<div class="min-h-screen bg-[#191919] text-white">
+			  		  			${createHeaderSearchBar()}
 			<!-- Hero section with search -->
-			<div class="bg-gradient-to-r from-purple-500 to-blue-400 py-16">
+			<div class="bg-gradient-to-r from-purple-500 to-purple-900 py-16">
 				<div class="container mx-auto px-4">
 					<h1 class="text-4xl font-bold text-center mb-8">
 						${query
 			? `Search Results for "${secureHtmlService.sanitizeText(query)}"`
 			: 'Search Plugins'}
 					</h1>
-					${searchBar}
+                    <div class="max-w-3xl mx-auto">
+                        <form action="/directory/search" method="GET" class="flex gap-2">
+                            <input 
+                                type="text" 
+                                name="q" 
+                                placeholder="Search plugins..." 
+                                class="flex-1 px-6 py-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-white"
+                            >
+                            <button 
+                                type="submit"
+                                class="block text-center bg-purple-600 text-white font-medium rounded-lg px-5 py-2.5"
+                            >
+                                Search
+                            </button>
+                        </form>
+                    </div>
 					${tags.length > 0 ? `
 						<div class="mt-4 flex flex-wrap justify-center gap-2">
 							${tags.map(tag => `

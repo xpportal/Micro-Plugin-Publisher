@@ -1,26 +1,37 @@
 name = "micro-plugin-publisher"
 main = "src/worker.js"
-compatibility_date = "2024-10-25"  # Update to today's date
-compatibility_flags = ["nodejs_compat"]  # Use this instead of node_compat
+compatibility_date = "2024-10-25"
+compatibility_flags = ["nodejs_compat"]
 account_id = "95d5ca589c39bf4189b080cfc8417c8e"
 
 kv_namespaces = [
-  { binding = "DOWNLOAD_COUNTS", id = "64c89ebd74d642e190180b5b89790b8a", preview_id = "64c89ebd74d642e190180b5b89790b8a" },
-  { binding = "DOWNLOAD_RATELIMIT", id = "f2fc9218a4cd44feb20c9ae8eea39273", preview_id = "f2fc9218a4cd44feb20c9ae8eea39273" }
+  { binding = "DOWNLOAD_COUNTS", id = "4136dcddcad84d7c8e0e8229febcc714", preview_id = "4136dcddcad84d7c8e0e8229febcc714" },
+  { binding = "DOWNLOAD_RATELIMIT", id = "f2fc9218a4cd44feb20c9ae8eea39273", preview_id = "f2fc9218a4cd44feb20c9ae8eea39273" },
+  { binding = "DOWNLOAD_QUEUE", id = "860012c1d601418d8eafe1f141608b4a", preview_id = "860012c1d601418d8eafe1f141608b4a" }
 ]
 
 [observability]
 enabled = true
 head_sampling_rate = 1
 
+[triggers]
+crons = ["*/5 * * * *"]
+
 [[durable_objects.bindings]]
 name = "PLUGIN_REGISTRY"
 class_name = "PluginRegistryDO"
 
-# Single migration that creates the DO with SQLite enabled
+[[durable_objects.bindings]]
+name = "USER_AUTH"
+class_name = "UserAuthDO"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PluginRegistryDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["UserAuthDO"]
 
 [vars]
 PLUGIN_BUCKET_URL = "https://micro-plugin-publisher.95d5ca589c39bf4189b080cfc8417c8e.r2.cloudflarestorage.com"

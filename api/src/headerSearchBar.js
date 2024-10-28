@@ -1,8 +1,8 @@
 
 const mainLogo = 'https://pub-2ef6bc2ae372488daf94a858e2b752ac.r2.dev/main-logo.png';
-const logoMarkup = `<a href="/" class="mr-4"><img src="${mainLogo}" alt="Logo" class="max-h-8"></a>`;
+const logoMarkup = `<a href="/" class="mr-4"><img src="${mainLogo}" alt="Logo" class="h-8"></a>`;
 
-export function createSearchBar(currentQuery = '', tags = [], request) {
+export function createHeaderSearchBar(currentQuery = '', tags = [], request) {
 	console.log("REQ", request);
 	const safeQuery = currentQuery.replace(/[&<>"']/g, (match) => {
 		const escape = {
@@ -16,11 +16,12 @@ export function createSearchBar(currentQuery = '', tags = [], request) {
 	});
 
 	const mainLogo = 'https://pub-2ef6bc2ae372488daf94a858e2b752ac.r2.dev/main-logo.png';
-	const logoMarkup = `<a href="/" class="mr-4"><img src="${mainLogo}" alt="Logo" class="h-14"></a>`;
+	const logoMarkup = `<a href="/" class="mr-4"><img src="${mainLogo}" alt="Logo" class="h-8"></a>`;
 
 	return `
 		  <div class="w-full mx-auto px-4 py-2">
 			  <div class="w-full max-w-6xl mx-auto px-2 py-4 flex items-center">
+				${logoMarkup}
 				<form action="/directory/search" method="GET" class="relative flex-grow" autocomplete="off">
 				<input 
 					type="search" 

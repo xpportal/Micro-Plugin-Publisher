@@ -1,5 +1,5 @@
 import { createSecureHtmlService } from './secureHtmlService';
-import { createSearchBar } from './searchBar';
+import { createHeaderSearchBar } from './headerSearchBar';
 
 export default function generateAuthorHTML(authorData) {
 	const secureHtmlService = createSecureHtmlService();
@@ -62,10 +62,8 @@ export default function generateAuthorHTML(authorData) {
 	</head>
 	<body>
 	<div class="min-h-screen bg-[#191919] text-white">
-		<div class="bg-gradient-to-r from-purple-500 to-blue-400 pb-0 pt-0 hero-card-container-outer mx-0 px-0">
-		<div class="bg-black bg-opacity-50 w-full">
-			${createSearchBar()}
-		</div>
+		  		  			${createHeaderSearchBar()}
+		<div class="bg-gradient-to-r from-purple-500 to-purple-900 pb-0 pt-0 hero-card-container-outer mx-0 px-0">
 		<div class="container mx-auto px-0 pb-2">
 			<div class="asset-card-author rounded-b-3xl p-8 mb-8 shadow-2xl transform min-h-[200px]">
 			<div class="flex flex-col md:flex-row items-center md:items-start">
@@ -147,7 +145,10 @@ export default function generateAuthorHTML(authorData) {
 			<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
 			<p>
 				<a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
-				<a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a>
+				<a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a> |
+				<a href="https://github.com/xpportal/Micro-Plugin-Publisher" class="text-purple-400 hover:underline">
+					Source Code
+				</a>
 			</p>
 			</div>
 		</div>

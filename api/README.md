@@ -60,6 +60,7 @@ The `wrangler.toml` file in your project directory contains the configuration fo
 The Plugin Publishing System provides the following endpoints:
 
 ### GET Endpoints
+- `/`: Homepage with author listings
 - `/plugin-data`: Retrieve plugin data (cached)
 - `/author-data`: Retrieve author data (cached)
 - `/authors-list`: Get a list of all authors (cached)
@@ -70,25 +71,63 @@ The Plugin Publishing System provides the following endpoints:
 - `/download-count`: Get download count for a plugin
 - `/search`: Search plugins with optional tag filtering
 - `/directory/search`: Get HTML search results page
+- `/activate`: Record plugin activation
+- `/activation-count`: Get activation count for a plugin
+- `/register`: Get registration page HTML
+- `/roll-api-key`: Get API key roll interface
+- `/roll-key-with-token`: Complete key roll with verification token
+- `/clear-cache`: Public cache clearing endpoint
 
 ### POST Endpoints
+- `/create-user`: Register new user (no auth required, needs invite code)
+- `/delete-user`: Remove user and associated data (admin only)
+- `/rotate-key`: Standard API key rotation
+- `/admin-update-user`: Update user details (admin only)
+- `/initiate-key-roll`: Start key recovery process
+- `/verify-key-roll`: Complete key recovery with GitHub verification
 - `/migrate-data`: Migrate existing data to SQLite database
+- `/migrate-authors`: Migrate author data to new format
+- `/delete-plugin`: Remove a specific plugin
+- `/delete-author`: Remove an author and all associated data
 - `/record-download`: Record a plugin download
-- `/upload-chunk`: Upload a chunk of a plugin file
-- `/upload-json`: Upload JSON metadata for a plugin
-- `/finalize-upload`: Finalize a plugin upload
+- `/plugin-upload-chunk`: Upload a chunk of a plugin file
+- `/plugin-upload-json`: Upload JSON metadata for a plugin
+- `/plugin-upload-assets`: Upload plugin assets (icons, banners)
+- `/plugin-upload-complete`: Finalize a plugin upload
 - `/update-author-info`: Update author information
-- `/upload-asset`: Upload plugin assets (icons, banners)
 - `/backup-plugin`: Create backup of currently live files
-- `/clear-cache`: Clear cached responses
+- `/clear-cache`: Clear cached responses (authenticated)
 
-To use `POST` endpoints, include your API Secret in the Authorization header:
+### Authentication Requirements
+
+Most POST endpoints require authentication via API key in the Authorization header:
 
 ```bash
-curl -X POST https://your-worker.dev/clear-cache \
+curl -X POST https://your-worker.dev/endpoint \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+```
+
+`POST` Exceptions (no auth required):
+- `/create-user`
+- `/register`
+- `/initiate-key-roll`
+- `/verify-key-roll`
+- `/search`
+
+Admin-only endpoints require the main API secret:
+```bash
+curl -X POST https://your-worker.dev/admin-update-user \
   -H "Authorization: Bearer YOUR_API_SECRET" \
   -H "Content-Type: application/json"
 ```
+
+### Caching Behavior
+
+All GET endpoints that return HTML or JSON data are cached at the edge with a 1-hour TTL. Cache can be bypassed by:
+- Including a valid API key in the request
+- Using the `/clear-cache` endpoint
+- Uploading new content (automatic cache invalidation)
 
 ## Caching
 
@@ -368,10 +407,157 @@ To modify the worker's functionality:
 - URL and resource validation
 - Tag and attribute whitelisting
 
-### API Security 
-- Rate limiting on sensitive endpoints
-- Required auth for all POST operations
-- Secure session handling
+## User Management
+
+The Plugin Publishing System includes a robust user management system with secure registration, API key management, and GitHub-based verification.
+
+### Registration
+
+New users can register through the `/register` endpoint which provides a web interface for:
+- Creating a new author account
+- Setting up GitHub integration
+- Generating initial API credentials
+- Requiring invite codes for controlled access
+
+Registation workflow:
+1. User visits the registration page
+2. Provides username, email, GitHub username, and invite code
+3. System validates credentials and invite code
+4. Generates initial API key
+5. Downloads configuration file with credentials
+
+### API Key Management
+
+The system provides several methods for managing API keys:
+
+#### Standard Key Rotation
+- Endpoint: `POST /rotate-key`
+- Requires current API key authentication
+- Generates new credentials immediately
+- Invalidates previous key
+
+#### GitHub-Based Key Recovery
+For users who need to recover access, the system provides a secure GitHub-based verification:
+
+1. **Initiate Recovery**
+   - Endpoint: `POST /initiate-key-roll`
+   - Required fields:
+     ```json
+     {
+       "username": "string",
+       "email": "string"
+     }
+     ```
+   - Returns verification instructions and token
+
+2. **Create Verification Gist**
+   - User creates a public GitHub gist
+   - Filename must match pattern: `plugin-publisher-verify-{username}.txt`
+   - Content must include provided verification token
+
+3. **Complete Verification**
+   - Endpoint: `POST /verify-key-roll`
+   - Required fields:
+     ```json
+     {
+       "gistUrl": "string",
+       "verificationToken": "string"
+     }
+     ```
+   - System verifies:
+     - Gist ownership matches registered GitHub username
+     - Verification token is valid and not expired
+     - File content matches expected format
+   - Returns new API key upon successful verification
+
+### User Authentication Endpoints
+
+| Endpoint | Method | Description | Auth Required |
+|----------|---------|-------------|---------------|
+| `/register` | GET | Registration page | No |
+| `/create-user` | POST | Create new user account | No (requires invite code) |
+| `/rotate-key` | POST | Standard key rotation | Yes |
+| `/roll-api-key` | GET | Key recovery interface | No |
+| `/initiate-key-roll` | POST | Start recovery process | No |
+| `/verify-key-roll` | POST | Complete recovery process | No |
+
+### Security Considerations in Designing this System
+
+- **Rate Limiting**: Prevents brute force attempts
+- **Invite Code System**: Controls user registration with a simple wrangler command to roll it
+- **GitHub Verification**: Links accounts to GitHub users
+- **Secure Key Generation**: Uses cryptographic random values
+- **Short-lived Verification Tokens**: Expires after 1 hour (considering lowering to much lower, like 5 minutes tbd...)
+- **Atomic Key Updates**: Prevents race conditions during key changes
+
+### Key Configuration
+
+The system generates a configuration file (`plugin-publisher-config.txt`) containing:
+```
+API_KEY=username.keyid
+PLUGIN_API_URL=https://pluginpublisher.com
+BUCKET_URL=https://assets.pluginpublisher.com
+```
+
+### Best Practices
+
+1. **API Key Security**
+   - Store API keys securely
+   - Never commit keys to version control
+   - Rotate keys regularly
+   - Use environment variables for key storage
+
+2. **Recovery Preparation**
+   - Keep email address up to date
+   - Maintain accurate GitHub username in profile
+   - Document recovery process for team members
+
+3. **GitHub Integration**
+   - Use a personal GitHub account
+   - Ensure gists are publicly accessible
+   - Maintain same GitHub username as registered
+
+### Troubleshooting
+
+Some imagined issues and solutions:
+
+1. **Registration Failed**
+   - Verify invite code is valid
+   - Check if username/email already exists
+   - Ensure GitHub username is accurate
+
+2. **Key Recovery Issues**
+   - Confirm email matches registration
+   - Verify GitHub username ownership
+   - Check gist visibility settings
+   - Ensure verification token hasn't expired
+
+3. **API Key Errors**
+   - Verify key format (username.keyid)
+   - Check if key has been rotated
+   - Confirm proper environment configuration
+
+### Administrative Functions
+
+For system administrators:
+
+- **User Management**
+  ```bash
+  # Update user details
+  curl -X POST https://your-worker.dev/admin-update-user \
+    -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"user","github_username":"ghuser","email":"new@email.com"}'
+  ```
+
+- **User Deletion**
+  ```bash
+  # Remove user and associated data
+  curl -X POST https://your-worker.dev/delete-user \
+    -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"user"}'
+  ```
 
 ## Troubleshooting
 

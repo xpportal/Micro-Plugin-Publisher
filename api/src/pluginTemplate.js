@@ -1,11 +1,10 @@
 import { createSecureHtmlService } from './secureHtmlService';
-// In generatePluginHTML.js
-import { createSearchBar } from './searchBar';
+import { createHeaderSearchBar } from './headerSearchBar';
 
 export default async function generatePluginHTML(pluginData, env) {
 	const secureHtmlService = createSecureHtmlService();
 	// Sanitize the input data
-	const safePlugin = secureHtmlService.sanitizePluginData(pluginData); // Remove env parameter here
+	const safePlugin = secureHtmlService.sanitizePluginData(pluginData);
 	console.log("datertots", JSON.stringify(pluginData));
 	if (!safePlugin) {
 		return new Response('Invalid plugin data', { status: 400 });
@@ -14,7 +13,7 @@ export default async function generatePluginHTML(pluginData, env) {
 	// Fetch the current download count
 	const downloadKey = `downloads:${safePlugin.author}:${safePlugin.slug}`;
 	const downloadCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
-
+	const activeInstalls = safePlugin.active_installs;
 	const html = `
     <!DOCTYPE html>
     <html lang="en">
@@ -32,7 +31,7 @@ export default async function generatePluginHTML(pluginData, env) {
     </head>
     <body>
       <div class="min-h-screen bg-[#191919] text-white">
-	  		  			${createSearchBar()}
+	  		  			${createHeaderSearchBar()}
         <div class="bg-gradient-to-r from-green-500 to-purple-600 pt-16">
           <div class="container mx-auto px-2 max-h-[620px]">
             <div class="relative max-w-[1300px] mx-auto shadow-lg rounded-t-2xl overflow-hidden">
@@ -86,6 +85,10 @@ export default async function generatePluginHTML(pluginData, env) {
 					<span class="mr-2 text-purple-600">↓</span>
 					<span class="text-s" id="download-count">${downloadCount.toLocaleString()}+ downloads</span>
 					</div>
+					<div class="flex items-center">
+					<span class="mr-2 text-purple-600">🔌</span>
+						<span class="text-s" id="active-installs">${activeInstalls.toLocaleString()}+ activations</span>
+					</div>
                 </div>
 				<a href="/download?author=${encodeURIComponent(safePlugin.author)}&slug=${encodeURIComponent(safePlugin.slug)}" 
 				class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-3xl mb-4 flex items-center justify-center">
@@ -118,13 +121,14 @@ export default async function generatePluginHTML(pluginData, env) {
           </div>
         </div>
         <div class="bg-black py-8">
-          <div class="container mx-auto px-4 text-center text-gray-200">
-			<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
-            <p>
-              <a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
-              <a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a>
-            </p>
-          </div>
+			<div class="container mx-auto px-4 text-center text-gray-200">
+				<p>&copy; ${new Date().getFullYear()} ${new Date().toLocaleTimeString()} Your Footer Text.</p>
+				<a href="/terms" class="text-purple-400 hover:underline">Terms of Service</a> | 
+				<a href="/privacy" class="text-purple-400 hover:underline">Privacy Policy</a> |
+				<a href="https://github.com/xpportal/Micro-Plugin-Publisher" class="text-purple-400 hover:underline">
+					Source Code
+				</a>
+			</div>
         </div>
       </div>
     </body>
