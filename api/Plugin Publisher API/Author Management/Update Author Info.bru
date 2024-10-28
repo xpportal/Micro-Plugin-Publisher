@@ -1,0 +1,36 @@
+meta {
+  name: Update Author Info
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/update-author-info
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "userId": "{{username}}",
+    "pluginName": "{{pluginName}}",
+    "authorData": {
+      "username": "{{username}}",
+      "email": "{{email}}",
+      "avatar_url": "https://example.com/avatar.jpg",
+      "bio": "Developer bio",
+      "website": "https://example.com",
+      "twitter": "twitterhandle",
+      "github": "githubhandle"
+    }
+  }
+}
+
+docs {
+  Update author profile information
+}

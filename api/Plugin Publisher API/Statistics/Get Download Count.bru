@@ -1,0 +1,20 @@
+meta {
+  name: Get Download Count
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/download-count?author={{username}}&slug={{pluginSlug}}
+  body: none
+  auth: none
+}
+
+params:query {
+  author: {{username}}
+  slug: {{pluginSlug}}
+}
+
+docs {
+  Get the number of downloads for a plugin
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Rotate API Key
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/rotate-key
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "{{username}}",
+    "currentApiKey": "{{apiKey}}"
+  }
+}
+
+docs {
+  Generate a new API key and invalidate the current one
+}

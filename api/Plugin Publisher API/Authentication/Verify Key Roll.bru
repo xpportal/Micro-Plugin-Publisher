@@ -1,0 +1,26 @@
+meta {
+  name: Verify Key Roll
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/verify-key-roll
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "gistUrl": "https://gist.github.com/username/gistid",
+    "verificationToken": "{{verificationToken}}"
+  }
+}
+
+docs {
+  Complete the key recovery process with GitHub verification
+}

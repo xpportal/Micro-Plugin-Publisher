@@ -1609,7 +1609,7 @@ export default {
 
 	async handleDeleteUser(request, env) {
 		try {
-			// This endpont requires admin API_SECRET
+			// This endpoint requires admin API_SECRET
 			const authHeader = request.headers.get('Authorization');
 			if (!authHeader || authHeader !== `Bearer ${env.API_SECRET}`) {
 				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -1617,65 +1617,90 @@ export default {
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-
-			// Parse request once
+	
 			const data = await request.json();
 			const { username } = data;
-
+	
 			if (!username) {
 				return new Response(JSON.stringify({ error: 'Missing username' }), {
 					status: 400,
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-
-			// First delete the user from UserAuthDO
-			const authId = env.USER_AUTH.idFromName("global");
-			const auth = env.USER_AUTH.get(authId);
-
-			const authResponse = await auth.fetch(new Request('http://internal/delete-user', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ username })
-			}));
-
-			if (!authResponse.ok) {
-				throw new Error('Failed to delete user authentication data');
-			}
-
-			// Then delete all their author data and resources
-			const registryId = env.PLUGIN_REGISTRY.idFromName("global");
-			const registry = env.PLUGIN_REGISTRY.get(registryId);
-
-			const registryResponse = await registry.fetch(new Request('http://internal/delete-author', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ authorName: username })
-			}));
-
-			if (!registryResponse.ok) {
-				throw new Error('Failed to delete author data');
-			}
-
-			// Delete all their files from bucket
-			const prefix = `${username}/`;
-			const files = await env.PLUGIN_BUCKET.list({ prefix });
-			for (const file of files.objects) {
-				await env.PLUGIN_BUCKET.delete(file.key);
-			}
-
-			return new Response(JSON.stringify({
+	
+			// Delete user data in parallel for better performance
+			const [authResult, registryResult, bucketResult] = await Promise.allSettled([
+				// 1. Delete from UserAuthDO
+				(async () => {
+					const authId = env.USER_AUTH.idFromName("global");
+					const auth = env.USER_AUTH.get(authId);
+					const response = await auth.fetch(new Request('http://internal/delete-user', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ username })
+					}));
+					
+					if (!response.ok) {
+						const error = await response.text();
+						throw new Error(`Auth deletion failed: ${error}`);
+					}
+					return await response.json();
+				})(),
+	
+				// 2. Delete from PluginRegistryDO
+				(async () => {
+					const registryId = env.PLUGIN_REGISTRY.idFromName("global");
+					const registry = env.PLUGIN_REGISTRY.get(registryId);
+					const response = await registry.fetch(new Request('http://internal/delete-author', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ authorName: username })
+					}));
+					
+					if (!response.ok) {
+						const error = await response.text();
+						throw new Error(`Registry deletion failed: ${error}`);
+					}
+					return await response.json();
+				})(),
+	
+				// 3. Delete files from bucket
+				(async () => {
+					const prefix = `${username}/`;
+					const files = await env.PLUGIN_BUCKET.list({ prefix });
+					const deletionResults = await Promise.all(
+						files.objects.map(file => env.PLUGIN_BUCKET.delete(file.key))
+					);
+					return { deletedFiles: files.objects.length };
+				})()
+			]);
+	
+			// Process results and build response
+			const response = {
 				success: true,
-				message: `User ${username} and all associated data have been deleted`
-			}), {
+				details: {
+					auth: authResult.status === 'fulfilled' ? authResult.value : { error: authResult.reason?.message },
+					registry: registryResult.status === 'fulfilled' ? registryResult.value : { error: registryResult.reason?.message },
+					storage: bucketResult.status === 'fulfilled' ? bucketResult.value : { error: bucketResult.reason?.message }
+				}
+			};
+	
+			// If any operation failed, mark overall success as false but continue with others
+			if (authResult.status === 'rejected' || registryResult.status === 'rejected' || bucketResult.status === 'rejected') {
+				response.success = false;
+				response.message = 'Some deletion operations failed. Check details for more information.';
+				return new Response(JSON.stringify(response), {
+					status: 207, // 207 Multi-Status
+					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+				});
+			}
+	
+			response.message = `User ${username} and all associated data have been deleted`;
+			return new Response(JSON.stringify(response), {
 				status: 200,
 				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
-
+	
 		} catch (error) {
 			console.error('Error deleting user:', error);
 			return new Response(JSON.stringify({
@@ -1688,7 +1713,7 @@ export default {
 			});
 		}
 	},
-
+	
 	async fetch(request, env) {
 		const url = new URL(request.url);
 		const path = url.pathname;

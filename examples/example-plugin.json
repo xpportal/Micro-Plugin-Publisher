@@ -1,42 +1,73 @@
-[
-  {
-    "name": "XR Publisher",
-    "slug": "xr-publisher",
-    "version": "2.0-alpha",
-    "author": "<a href=\"https://antpb.com\">antpb</a>",
-    "author_profile": "https://profiles.wordpress.org/antpb/",
-    "requires": "5.0",
-    "tested": "6.7",
-    "requires_php": "7.2",
-    "rating": 0,
-    "num_ratings": 0,
-    "support_threads": 0,
-    "support_threads_resolved": 0,
-    "active_installs": 50,
-    "downloaded": 0,
-    "last_updated": "2024-10-09 12:00pm GMT",
-    "added": "2024-10-09",
-    "homepage": "https://xrpublisher.com/",
-    "short_description": "A WordPress plugin for drag and drop 3D content creation compatible with most XR devices.",
-    "description": "A WordPress plugin for publishing XR content with support for WebXR and popular glTF Extensions.",
-    "download_link": "https://updater.sxp.digital/xr-publisher.zip",
-	"banner": "https://updater.sxp.digital/xr-publisher/banner-772x250.png",
-    "tags": {
-      "tag1": "metaverse",
-      "tag2": "virtual reality"
-    },
-    "donate_link": "https://xrpublisher.com",
-    "contributors": {
-      "yourname": {
-        "profile": "https://profiles.wordpress.org/antpb/",
-        "avatar": "https://secure.gravatar.com/avatar/youravatarhash?s=96&d=monsterid&r=g",
-        "display_name": "antpb"
-      }
-    },
-    "icons": {
-      "1x": "https://updater.sxp.digital/xr-publisher/icon-128x128.png",
-      "2x": "https://updater.sxp.digital/xr-publisher/icon-256x256.png"
-    },
-    "source": "SXP Digital"
+{
+	"name": "XR Publisher",
+	"slug": "xr-publisher",
+	"version": "3.0.2",
+	"author": "bilbo",
+	"author_profile": "https://profiles.wordpress.org/antpb/",
+	"requires": "5.0",
+	"tested": "6.7",
+	"requires_php": "7.2",
+	"requires_plugins": [],
+	"compatibility": [],
+	"rating": 0,
+	"ratings": {
+	  "1": 0,
+	  "2": 0,
+	  "3": 0,
+	  "4": 0,
+	  "5": 0
+	},
+	"num_ratings": 0,
+	"support_threads": 0,
+	"support_threads_resolved": 0,
+	"active_installs": 50,
+	"downloaded": 0,
+	"last_updated": "2024-10-09 12:00pm GMT",
+	"added": "2024-10-09",
+	"homepage": "https://xrpublisher.com/",
+	  "sections": {
+	  "description": "## Welcome to the metaverse, WordPress!\nElevate your WordPress site to new dimensions with our 3OV plugin, an intuitive drag-and-drop tool for effortlessly integrating virtual worlds, 3D content, AR, and VR experiences. Built on React Three Fiber, our plugin supports a wide range of interoperable extensions and comes equipped with cutting-edge AI features implemented in a NPC block. Get ready to transform your website into an immersive metaverse destination!\n\n## Seamless WebXR Integration with Drag and Drop Functionality\nWith the 3OV plugin, embedding 3D (glb) files into your WordPress block editor content has never been easier. Simply drag and drop files to create virtual worlds anywhere you can place a block. Engage your visitors with a click of the \"Enter in VR\" button, allowing them to teleport throughout your virtual environment. Stay tuned for even more exhilarating VR features!\n\n## Embrace the Possibilities of Interoperability with Supported OMI, KHR, and Other Extensions\nKHR_audio: Immerse your audience in both spatial and global audio by designing scenes with the build.xpportal.io Spoke editor. Export glb files compatible with the Three OMI Audio Emitter Extension.\nOMI_collider: Enable walking on surfaces for a more interactive experience.\nOMI_link: Metaverse traversal at its finest! Walk into objects with the omi_link extension to simulate hyperlink actions.\nOMI_spawn_point: Customize your player's starting point in the virtual world.\nSXP_personality: Bring your NPCs to life with Magick ML or our Alchemy Worker through the innovative 3OV NPC Block.\nElevate your WordPress site into a truly immersive virtual experience with the 3OV plugin. Try it now and unlock a whole new world of possibilities!",
+	  "installation": "This plugin can be installed directly from your WordPress site.\n\n1. Log in to your WordPress site and navigate to **Plugins &rarr; Add New**.\n2. Type \"Three Object Viewer\" into the Search box.\n3. Locate the Three Object Viewer plugin in the list of search results and click **Install Now**.\n4. Once installed, click the Activate button.\n\nIt can also be installed manually using a zip file.\n\n1. Download the Three Object Viewer plugin from WordPress.org.\n2. Log in to your WordPress site and navigate to **Plugins &rarr; Add New**.\n3. Click the **Upload Plugin** button.\n4. Click the **Choose File** button, select the zip file you downloaded in step 1, then click the **Install Now** button.\n5. Click the **Activate Plugin** button.",
+	  "changelog": "= 1.7.1 =\nFix: Change pro check to static\n\n= 1.7 =\nAdded: Plugin system for custom 3OV blocks in Environment inner blocks. Experimental but getting very solid! Example plugin coming soon.\nFixed: fixed bug where state was changing on scroll of the page.\nFixed: Environment Editor states where values did not exist caused the editor to crash in some cases.\n\n= 1.6 =\nFixed: Player Controller - Respawn while falling works again.\nAdded: Light Block - You can now control the individual lights in your worlds. Note: highly recommend not having more than two Libhg Blocks in a world for performance reasons.\nAdded: Environment Block - HDR setting to allow the usage of hdr environment map files (.hdr)\nAdded: Translations with support for es_MX and ja.\n\n= 1.5.2 =\nFixed: Full compatibility with the Site Editor.\n\n= 1.5.1 =\nAdded: Video Block - Now sets audio to positionally play where the video's plane or mesh is located in the scene.\nFixed: Player Controller animations fixed to not play incorrect direction when multiple directions are held.\nAdded: Saving indicator in the admin settings page.\n\n= 1.5.0 =\nFixed: Issue where player controler used property that is not available until initialized.\nAdded: Audio Block - Set audio global or positional to bring your worlds to life with sound.\n\n= 1.4.1 =\nFixed: Performance issues with controller using kinematicPositionBased now instead of dynamic. Also removed some points of collision to ease performance.\n\n= 1.4.0 =\nRemoved: 1st person controller (coming back in a future update)\nAdded: 3rd Person Controller + avatars.\nAdded: New setting to define the default avatar of your site.\nAdded: Loading animation when users clicks \"Load World\".\nAdded: Clickable canvas for elements like the Video Block. Click to play. Click again to pause.\nFixed: Removed Environment Block from rendering on an archive page for performance reasons. Not yet convinced there is a use case for multiple environment blocks on a page.\nAdded: Update logic for future options that need to initialize on update.\n\n= 1.3.7 =\nFixed: NPC text was falling into the ground. Moved up closer to NPC head position.\n\n= 1.3.6 =\nAdded: Compatibility with gltf files using Draco compression\nAdded: Custom geometry options for 3D Video Block. When selecting a glb to use as your video surface, ensure that you name the object in your glb \"screen\". More info in this video: https://twitter.com/threeov/status/1643098207361138691?s=20\n\n= 1.3.5 =\nAdded: GPT-4 compatibility for NPCs. You can use https://alchemy-gpt-4.sxp.digital as your ai url to use GPT-4 or host your own using the very same worker: https://github.com/xpportal/alchemy-worker-gpt4. (Note: you'll need access to gpt-4 for this to work. You are not able to use our keys.)\n\n= 1.3.4 =\nFixed: Incompatibility between Three.js and three-vrm was causing vrm files to fail to render. This should be in working order again.\n\n= 1.3.3 =\nFixes: 3OV is now fully compatible with the iframed/site editor. Yay! This was a scary bug that I didnt know how we'd solve. We we're able to contribute a fix upstream in Three.js! Please do report any problems.\n\n= 1.3.2 =\nFixes: Media Library logic in the settings page was using the incorrect action. h/t emotionull, thanks for the report!\n\n= 1.3.1 =\nFixes: downgrade r3f to compatible version\n\n= 1.3.0 =\nAdded: New Sky Block controls to allow skies without images.\nFixes: Environment block was previously not allowing to change the environment.\nFixes: Allows for glb files to be set as default animation in the settings page.\n\n= 1.2.2 =\nAdded: New transform control buttons in the editor to toggle between scale, rotation, translation.\nAdded: Now Environment Block initializes with a starter grid object and a spawn point to get you started quicker.\nFixes: Errors in WordPress messages from NPC responses were not scoped to root Namespace\n\n= 1.2.1 =\nFixes: Clears input after sending a message to a NPC\nRemoves cruft that made it into the release. Pardon my logs. :)\n\n= 1.2.0 =\nAdded: NPC Block for AI assistants in your 3OV worlds - you can use our endpoint up to 15 free requests before you'll need to use your own openai api key. We'll be publishing a post soon on how to configure your own logic in MagickML or your own worker.\nAdded: 3OV Settings panel to control global 3OV settings.\nAdded: Setting for default VRM animation. You can use any mixamo and similar FBX file as the source for your NPC and VRM file's default animations.\nAdded: Three Object Block now uses default idle animation for fbx files. Try it in AR!\nAdded: Settings for AI settings. You can configure your endpoint for your ai system. If you are using MagickML, you will not need to define an OpenAI api key. Just point it to your Magick instance. If you would like to use our worker, define your openai key there and everything should work as expected.\nFixed: Namespace collisions.\nFixed: Adjusted lighting to be slightly darker. Things were getting washed out.\nFixed: adjusted the character controller height to 0.33. Things were feeling low in all worlds so this could revert if folks arent happy. (Will be configurable in future release)\n\n\n= 1.1.0 =\nFixed: Controller was loading characters too high. Scale has changed so scenes may need to be verified to be as previously saved.\nFixed: VRM objects will load with an idle animation.\nAdded: New editor sidebar for selecting objects in the editor.\nAdded: Press F now when in the editor\nAdded: Hold shift while moving to run.\n\n= 1.0.9 =\nFixed: Spawn - Spawn block now properly loads a player in the spawn location.\nAdded: Initial support for OMI_spawn_point.\n\n= 1.0.8 =\nAdded: Click event for audio objects that contain KHR_audio. Improvements to come. To set a KHR_audio object to be interactable simply make the object collibable.\nAdded: Video - Interactions to play/pause a video. A paused video will now show a play icon to resume the video source. Video audio to come soon!\nAdded: Portal - VR interactions for Portal block. Now clicking on the portal block will take you to the destination.\nFixed: Video - autoPlay property was not being properly respected.\nFixed: Model and Environment Block - Animations were previously broken since the launch of the Environment Block. All should be good now with the caviat that you cannot use the same object twice in a scene. An update will fix this very soon.\nFixed: Sky Block - fixed issue where teleportation to the sky was possible. Stay on the ground!\n\n= 1.0.7 =\nFix: removes wp_texturize that was breaking url strings on the front end.\n\n= 1.0.6 =\nFix: Sky blocks were causing incredibly poor performance in VR. This is fixed by using a more optimized primitive for the skybox.\n\n= 1.0.5 =\nAdded: Openbrush support in the Model Block and Three Object Block. To use, add a Model Block to a scene and select a Tilt Brush glb file. Plugin can be downloaded at: https://github.com/xpportal/three-object-viewer-three-icosa/releases/tag/0.1.1\nFix: Initialize text at a better size when adding a Text Block\n\n= 1.0.4 =\nFix: Scaling and alignment of Portal text was not true on the front end to what was saved in the editor. This update fixes the text positining and centers it to the object's 0,0,0 position.\n\n= 1.0.3 =\nFix: Removes collider debug.\n\n= 1.0.2 =\nFix: Environment block settings were not respected on the front end. Should be good now!\nFix: range controls in the Environment block were in a broken flex.\n\n= 1.0.1 =\nEnvironment blocks without a OMI collider will be treated as a trimesh collider. This means that every item used in the Environment block will be collidable/walkable.\n\nImage Block Edit Controls now update correctly. Fixed a bug where an image would return to its previous location after chaging position.\n\n\n= 1.0.0 =\nNew Environment Block for building feature rich experiences. This is the start to something big. \n\n3D Image Block- The Image block enables position and rotation settings for any image pulled from your media library. Support for transparency and a future update will include the ability to set external urls as the source.- 3D Video Block- Similar to image, the video block enables content creators to select video assets from the Media Library to attach to a plane in 3D space. I plan to add the ability to select external urls as well as custom mesh objects to render video on. The block can be paused and played by focusing your view in the direction of the video and clicking.\n\n3D Model Block- The model block supports adding usdz, vrm, and glb files to your environment. This block has the ability to loop animations and be set to collidable so visitors can walk on the mesh surface.\n\nSpawn Point Block- define where your visitors land when they enter your world.\n\nPortal Block- Enable metaverse traversal or dive deeper into your site using urls and collidable objects to trigger traversal. There are settings to control the label and positioning of the label so your visitors know where they are going. This is going to be revamped after release to bring a prompt before traversing to ensure no unintended behavior.\n\nText Block- Use the text block to add text content inside of your worlds. You can define a color, position, and scale of the block of text. There will be more parameters in future updates.\n\n3D Sky Block- Wrap your world in a 360 spherical panoramic to simulate skies\n\nMore to come! V1 will almost certainly be buggy, but please report any issues at github.com/antpb/three-object-viewer\n\n= 1.0.1 =\nEnvironment blocks without a OMI collider will be treated as a trimesh collider. This means that every item used in the Environment block will be collidable/walkable.\n\nImage Block Edit Controls now update correctly. Fixed a bug where an image would return to its previous location after chaging position.\n\n\n= 1.0.0 =\nNew Environment Block for building feature rich experiences. This is the start to something big. \n\n3D Image Block- The Image block enables position and rotation settings for any image pulled from your media library. Support for transparency and a future update will include the ability to set external urls as the source.- 3D Video Block- Similar to image, the video block enables content creators to select video assets from the Media Library to attach to a plane in 3D space. I plan to add the ability to select external urls as well as custom mesh objects to render video on. The block can be paused and played by focusing your view in the direction of the video and clicking.\n\n3D Model Block- The model block supports adding usdz, vrm, and glb files to your environment. This block has the ability to loop animations and be set to collidable so visitors can walk on the mesh surface.\n\nSpawn Point Block- define where your visitors land when they enter your world.\n\nPortal Block- Enable metaverse traversal or dive deeper into your site using urls and collidable objects to trigger traversal. There are settings to control the label and positioning of the label so your visitors know where they are going. This is going to be revamped after release to bring a prompt before traversing to ensure no unintended behavior.\n\nText Block- Use the text block to add text content inside of your worlds. You can define a color, position, and scale of the block of text. There will be more parameters in future updates.\n\n3D Sky Block- Wrap your world in a 360 spherical panoramic to simulate skies\n\nMore to come! V1 will almost certainly be buggy, but please report any issues at github.com/antpb/three-object-viewer\n\n= 0.6.3 =\n*  Fix: Uploads were not merging allowed types. This update restores prior upload functionality with new usdz type.\n\n= 0.6.2 =\n\n*  Adds USDZ support to block (note, usdz files must not contain usdc files)\n*  Updates Three.js to 144\n*  Allows uploads of usdz files\n\n= 0.6.1 =\n\n*  Update rigibody types for vr objects. Sorry for the bouncy files! :)\n\n= 0.6.0 =\n\n*  Update react three fiber.\n*  Update three omi to factor in autoplaying prop name change.\n*  Fixes camera issues and sets better defaults. NOTE: default zoom has changed to 1. You will likely see visual regressions from this update if you have not changed the defaults. \n*  Fixes color pallete default value.\n*  Support VRM Materials.\n*  Multi Block Support. You can now have as many Three Object Blocks as you want per post and archive.\n\n= 0.5.0 =\n\n*  Fix animation build.\n\n= 0.4.0 =\n\n*  Fix animation front end render.\n\n= 0.3.0 =\n\n*  Adds animation support in the Three Object Block.\n\n= 0.2.0 =\n\n*  WordPress.org Release Version\n\n= 0.1.0 =\n\n*  Initial version."
+	  },
+	"banners": {
+	  "high": "https://pub-2ef6bc2ae372488daf94a858e2b752ac.r2.dev/antpb/xr-publisher/banner-1500x620.jpg",
+	  "low": "https://pub-2ef6bc2ae372488daf94a858e2b752ac.r2.dev/antpb/xr-publisher/banner-772x250.jpg"
+	},
+	"short_description": "A WordPress plugin for drag and drop 3D content creation compatible with most XR devices.",
+	"download_link": "https://updater.sxp.digital/xr-publisher.zip",
+	"screenshots": [],
+	"tags": {
+	  "tag1": "metaverse",
+	  "tag2": "virtual reality"
+	},
+	"versions": {
+	  "2.0-alpha": "https://updater.sxp.digital/xr-publisher.zip"
+	},
+	"donate_link": "https://xrpublisher.com",
+	"contributors": {
+	  "antpb": {
+		"profile": "https://profiles.wordpress.org/antpb/",
+		"avatar": "https://secure.gravatar.com/avatar/youravatarhash?s=96&d=monsterid&r=g",
+		"display_name": "antpb"
+	  }
+	},
+	"icons": {
+	  "1x": "https://pub-2ef6bc2ae372488daf94a858e2b752ac.r2.dev/antpb/xr-publisher/icon-256x256.jpg",
+	  "2x": "https://pub-2ef6bc2ae372488daf94a858e2b752ac.r2.dev/antpb/xr-publisher/icon-256x256.jpg"
+	},
+	"source": {
+	  "name": "SXP Digital",
+	  "url": "https://updater.sxp.digital"
+	},
+	"business_model": "commercial",
+	"commercial_support_url": "https://xrpublisher.com/support",
+	"support_url": "https://xrpublisher.com/community",
+	"preview_link": "https://xrpublisher.com/demo",
+	"repository_url": "https://github.com/antpb/xr-publisher",
+	"spec_meta": {
+	  "specification_version": "1.0",
+	  "specification_source": "aspirepress"
+	}
   }
-]
+  

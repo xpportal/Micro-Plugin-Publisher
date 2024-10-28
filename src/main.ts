@@ -86,7 +86,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 				logger.info(`JSON file not found at ${jsonFilePath}, loading example template`);
 
 				// Get the example template path
-				const exampleJsonPath = path.join(__dirname, '..', 'examples', 'example-plugin-info.json');
+				const exampleJsonPath = path.join(__dirname, '..', 'examples', 'example-plugin.json');
 				logger.info(`Example JSON file path: ${exampleJsonPath}`);
 
 				if (!fs.existsSync(exampleJsonPath)) {
@@ -373,13 +373,17 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 			await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
 
-
 			// Create plugin-build directory and subdirectories
 			const pluginBuildDir = path.join(pluginDir, 'plugin-build');
 			await fs.ensureDir(pluginBuildDir);
 			await fs.ensureDir(path.join(pluginBuildDir, 'json'));
 			await fs.ensureDir(path.join(pluginBuildDir, 'zip'));
 			await fs.ensureDir(path.join(pluginBuildDir, 'assets'));
+
+			// Copy example-author.json to author_info.json in the plugin-build directory
+			const exampleAuthorSourcePath = path.join(__dirname, '..', 'examples', 'example-plugin-dir-structure', 'plugin-build', 'example-author.json');
+			const authorInfoDestPath = path.join(pluginBuildDir, 'author_info.json');
+			await fs.copy(exampleAuthorSourcePath, authorInfoDestPath);
 
 			// Create empty .env file
 			await fs.writeFile(path.join(pluginDir, '.env'), '');
@@ -429,19 +433,64 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 			// Append the upgrader class inclusion and initialization code
 			const updaterCode = `
-  // Include the Upgrader class
-  require_once plugin_dir_path(__FILE__) . 'class-example-upgrader.php';
-  
-  function initialize_Micro_Plugin_Publisher_Updater() {
-	  $plugin_slug = '${pluginSlug}';
-	  $plugin_name = plugin_basename(__FILE__);
-	  $version = '${pluginVersion}';
-	  $metadata_url = 'https://plugins.sxp.digital/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/${pluginSlug}/${pluginSlug}.json';
-	  $zip_url = 'https://plugins.sxp.digital/e188bdf1-1cad-4a40-b8d8-fa2a354beea0/${pluginSlug}/${pluginSlug}.zip';
-	  new microUpgrader\\Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $metadata_url, $zip_url);
-  }
-  add_action('init', 'initialize_Micro_Plugin_Publisher_Updater');
-  `;
+if (!defined('ABSPATH')) {
+	exit;
+}
+
+require_once plugin_dir_path(__FILE__) . 'class-example-upgrader.php';
+
+define('MY_NEW_AWESOME_PLUGIN_VERSION', '${pluginVersion}');
+define('MY_NEW_AWESOME_PLUGIN_JSON', 'https://assets.pluginpublisher.com/${authorName}/${pluginSlug}/${pluginSlug}.zip');
+define('MY_NEW_AWESOME_PLUGIN_WORKER_ENDPOINT', 'https://pluginpublisher.com');
+
+register_activation_hook(__FILE__, 'handle_plugin_activation');
+
+function handle_plugin_activation() {
+	add_option('my_new_awesome_plugin_pending_activation', true);
+}
+
+function handle_pending_activation() {
+	if (get_option('my_new_awesome_plugin_pending_activation')) {
+		delete_option('my_new_awesome_plugin_pending_activation');
+		
+		if (!get_option('my_new_awesome_plugin_activation_tracked')) {
+			$activation_url = MY_NEW_AWESOME_PLUGIN_WORKER_ENDPOINT . '/activate';
+			$activation_url = add_query_arg(array(
+				'author' => '',
+				'slug' => '${pluginSlug}'
+			), $activation_url);
+
+			$response = wp_remote_get($activation_url, array(
+				'timeout' => 30,
+				'sslverify' => true
+			));
+
+			if (!is_wp_error($response)) {
+				$response_code = wp_remote_retrieve_response_code($response);
+				if ($response_code === 200) {
+					update_option('my_new_awesome_plugin_activation_tracked', true);
+					error_log('My New Awesome Plugin: Activation tracked successfully');
+				} else {
+					error_log('My New Awesome Plugin: Activation failed with response code ' . $response_code);
+				}
+			} else {
+				error_log('My New Awesome Plugin: Activation error - ' . $response->get_error_message());
+			}
+		}
+	}
+}
+add_action('admin_init', 'handle_pending_activation');
+
+function initialize_Micro_Plugin_Publisher_Updater() {
+	$plugin_slug = '${pluginSlug}';
+	$plugin_name = plugin_basename(__FILE__);
+	$version = MY_NEW_AWESOME_PLUGIN_VERSION;
+	$metadata_url = MY_NEW_AWESOME_PLUGIN_JSON;
+	$zip_url = 'https://assets.pluginpublisher.com/${authorName}/${pluginSlug}/${pluginSlug}.zip';
+	new microUpgrader\\Micro_Plugin_Publisher_Updater($plugin_slug, $plugin_name, $version, $metadata_url, $zip_url);
+}
+add_action('init', 'initialize_Micro_Plugin_Publisher_Updater');
+			`;
 
 			mainPluginContent += updaterCode;
 

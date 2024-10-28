@@ -218,17 +218,28 @@ export class UserAuthDO {
 
 	async deleteUser(username) {
 		try {
+			// First delete any pending key roll verifications
+			await this.sql.exec(
+				"DELETE FROM key_roll_verifications WHERE username = ?",
+				username
+			);
+	
+			// Then delete the user
 			const result = await this.sql.exec(
 				"DELETE FROM users WHERE username = ?",
 				username
 			);
-			return result.changes > 0;
+	
+			// Return success even if no user was found (idempotent delete)
+			return {
+				success: true,
+				deleted: result.changes > 0
+			};
 		} catch (error) {
-			console.error("Error deleting user:", error);
-			throw error;
+			console.error("Error deleting user from auth database:", error);
+			throw new Error(`Failed to delete user from auth database: ${error.message}`);
 		}
-	}
-
+	}	
 
 	// Verify API key
 	async verifyApiKey(apiKey) {

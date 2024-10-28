@@ -1,0 +1,19 @@
+meta {
+  name: Get Author Data
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/author-data?author={{username}}
+  body: none
+  auth: none
+}
+
+params:query {
+  author: {{username}}
+}
+
+docs {
+  Get author profile and plugins
+}
