@@ -198,6 +198,7 @@ export default {
 			const url = new URL(request.url);
 			const author = url.searchParams.get('author');
 			const slug = url.searchParams.get('slug');
+			const track = url.searchParams.get('track') !== 'false';
 
 			if (!author || !slug) {
 				return new Response(JSON.stringify({
@@ -208,57 +209,59 @@ export default {
 				});
 			}
 
-			// Rate limiting logic stays the same
-			const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Client-IP');
-			const rateLimitKey = `ratelimit:${clientIP}:${author}:${slug}`;
-			const currentTime = Date.now();
+			if (track) {
+				// Rate limiting logic stays the same
+				const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Client-IP');
+				const rateLimitKey = `ratelimit:${clientIP}:${author}:${slug}`;
+				const currentTime = Date.now();
 
-			const rateLimitData = await env.DOWNLOAD_RATELIMIT.get(rateLimitKey);
-			if (rateLimitData) {
-				const { timestamp, count } = JSON.parse(rateLimitData);
-				if (currentTime - timestamp < 3600000 && count >= 5) {
-					return new Response(JSON.stringify({
-						error: 'Rate limit exceeded. Please try again later.'
-					}), {
-						status: 429,
-						headers: {
-							...CORS_HEADERS,
-							'Content-Type': 'application/json',
-							'Retry-After': '3600'
-						}
-					});
-				}
+				const rateLimitData = await env.DOWNLOAD_RATELIMIT.get(rateLimitKey);
+				if (rateLimitData) {
+					const { timestamp, count } = JSON.parse(rateLimitData);
+					if (currentTime - timestamp < 3600000 && count >= 5) {
+						return new Response(JSON.stringify({
+							error: 'Rate limit exceeded. Please try again later.'
+						}), {
+							status: 429,
+							headers: {
+								...CORS_HEADERS,
+								'Content-Type': 'application/json',
+								'Retry-After': '3600'
+							}
+						});
+					}
 
-				if (currentTime - timestamp < 3600000) {
-					await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
-						timestamp,
-						count: count + 1
-					}), { expirationTtl: 3600 });
+					if (currentTime - timestamp < 3600000) {
+						await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
+							timestamp,
+							count: count + 1
+						}), { expirationTtl: 3600 });
+					} else {
+						await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
+							timestamp: currentTime,
+							count: 1
+						}), { expirationTtl: 3600 });
+					}
 				} else {
 					await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
 						timestamp: currentTime,
 						count: 1
 					}), { expirationTtl: 3600 });
 				}
-			} else {
-				await env.DOWNLOAD_RATELIMIT.put(rateLimitKey, JSON.stringify({
-					timestamp: currentTime,
-					count: 1
-				}), { expirationTtl: 3600 });
+
+				// Record download in KV store
+				const downloadKey = `downloads:${author}:${slug}`;
+				const queueKey = `download_queue:${author}:${slug}:${Date.now()}`;
+
+				// Add to download queue with 1 hour expiration
+				await env.DOWNLOAD_QUEUE.put(queueKey, '1', {
+					expirationTtl: 3600
+				});
+
+				// Update running total in KV...maybe remove this soon.
+				const currentCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
+				await env.DOWNLOAD_COUNTS.put(downloadKey, (currentCount + 1).toString());
 			}
-
-			// Record download in KV store
-			const downloadKey = `downloads:${author}:${slug}`;
-			const queueKey = `download_queue:${author}:${slug}:${Date.now()}`;
-
-			// Add to download queue with 1 hour expiration
-			await env.DOWNLOAD_QUEUE.put(queueKey, '1', {
-				expirationTtl: 3600
-			});
-
-			// Update running total in KV...maybe remove this soon.
-			const currentCount = parseInt(await env.DOWNLOAD_COUNTS.get(downloadKey)) || 0;
-			await env.DOWNLOAD_COUNTS.put(downloadKey, (currentCount + 1).toString());
 
 			// Get and return the zip file
 			const zipKey = `${author}/${slug}/${slug}.zip`;
@@ -290,7 +293,6 @@ export default {
 			});
 		}
 	},
-
 	async getDownloadCount(request, env) {
 		try {
 			const url = new URL(request.url);
@@ -1617,17 +1619,17 @@ export default {
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-	
+
 			const data = await request.json();
 			const { username } = data;
-	
+
 			if (!username) {
 				return new Response(JSON.stringify({ error: 'Missing username' }), {
 					status: 400,
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-	
+
 			// Delete user data in parallel for better performance
 			const [authResult, registryResult, bucketResult] = await Promise.allSettled([
 				// 1. Delete from UserAuthDO
@@ -1639,14 +1641,14 @@ export default {
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ username })
 					}));
-					
+
 					if (!response.ok) {
 						const error = await response.text();
 						throw new Error(`Auth deletion failed: ${error}`);
 					}
 					return await response.json();
 				})(),
-	
+
 				// 2. Delete from PluginRegistryDO
 				(async () => {
 					const registryId = env.PLUGIN_REGISTRY.idFromName("global");
@@ -1656,14 +1658,14 @@ export default {
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ authorName: username })
 					}));
-					
+
 					if (!response.ok) {
 						const error = await response.text();
 						throw new Error(`Registry deletion failed: ${error}`);
 					}
 					return await response.json();
 				})(),
-	
+
 				// 3. Delete files from bucket
 				(async () => {
 					const prefix = `${username}/`;
@@ -1674,7 +1676,7 @@ export default {
 					return { deletedFiles: files.objects.length };
 				})()
 			]);
-	
+
 			// Process results and build response
 			const response = {
 				success: true,
@@ -1684,7 +1686,7 @@ export default {
 					storage: bucketResult.status === 'fulfilled' ? bucketResult.value : { error: bucketResult.reason?.message }
 				}
 			};
-	
+
 			// If any operation failed, mark overall success as false but continue with others
 			if (authResult.status === 'rejected' || registryResult.status === 'rejected' || bucketResult.status === 'rejected') {
 				response.success = false;
@@ -1694,13 +1696,13 @@ export default {
 					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 				});
 			}
-	
+
 			response.message = `User ${username} and all associated data have been deleted`;
 			return new Response(JSON.stringify(response), {
 				status: 200,
 				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
-	
+
 		} catch (error) {
 			console.error('Error deleting user:', error);
 			return new Response(JSON.stringify({
@@ -1713,7 +1715,7 @@ export default {
 			});
 		}
 	},
-	
+
 	async fetch(request, env) {
 		const url = new URL(request.url);
 		const path = url.pathname;

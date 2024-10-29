@@ -153,8 +153,10 @@ export default function (context: LocalMain.AddonMainContext): void {
 			// Ensure the directory exists before writing
 			await fs.ensureDir(path.dirname(jsonFilePath));
 
+			const content = JSON.parse(jsonContent);
+
 			// Write the JSON content
-			await fs.writeJson(jsonFilePath, jsonContent, { spaces: 2 });
+			await fs.writeJson(jsonFilePath, content, { spaces: 2 });
 			logger.info('Successfully wrote JSON file');
 
 			return { success: true };

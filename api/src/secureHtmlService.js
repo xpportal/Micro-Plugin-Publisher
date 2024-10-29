@@ -7,28 +7,31 @@ class SecureHtmlService {
 
 	getSecurityHeaders(nonce) {
 		return {
-			'Content-Security-Policy': [
-				// Allow resources from same origin and CDN
-				"default-src 'self' https://cdn.jsdelivr.net",
-				// Allow scripts from CDN and inline scripts with nonce
-				`script-src 'self' 'nonce-${nonce}' https://cdn.jsdelivr.net`,
-				// Allow styles from CDN and inline styles
-				"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-				// Allow images from any HTTPS source
-				"img-src 'self' https: data:",
-				// Allow fonts from CDN
-				"font-src 'self' https://cdn.jsdelivr.net",
-				// Basic security headers that don't impact functionality
-				"frame-ancestors 'none'",
-				"base-uri 'self'"
-			].join('; '),
-			'X-Content-Type-Options': 'nosniff',
-			'X-Frame-Options': 'DENY',
-			'Referrer-Policy': 'strict-origin-when-cross-origin'
+		  'Content-Security-Policy': [
+			// Allow resources from same origin and CDN
+			"default-src 'self' https://cdn.jsdelivr.net",
+			// Allow scripts from CDN and playground domains
+			`script-src 'self' 'nonce-${nonce}' https://cdn.jsdelivr.net https://playground.xr.foundation`,
+			// Allow styles from CDN and inline styles
+			"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+			// Allow images from any HTTPS source
+			"img-src 'self' https: data:",
+			// Allow fonts from CDN
+			"font-src 'self' https://cdn.jsdelivr.net",
+			// Allow framing for playground
+			"frame-src 'self' https://playground.xr.foundation",
+			// Allow connections to playground
+			"connect-src 'self' https://playground.xr.foundation",
+			// Basic security headers
+			"base-uri 'self'"
+		  ].join('; '),
+		  'X-Content-Type-Options': 'nosniff',
+		  'X-Frame-Options': 'SAMEORIGIN',  // Changed from DENY to allow our iframe
+		  'Referrer-Policy': 'strict-origin-when-cross-origin'
 		};
-	}
+	  }
 
-	sanitizeText(text) {
+	  sanitizeText(text) {
 		if (!text) return '';
 		return String(text)
 			.replace(/&/g, '&amp;')
@@ -69,14 +72,16 @@ class SecureHtmlService {
 					const src = element.getAttribute('src');
 					if (src && (
 						src.includes('cdn.jsdelivr.net') ||
-						src.includes('playground.wordpress.net')
+						src.includes('playground.wordpress.net') ||
+						src.includes('playground.xr.foundation') // Add our custom playground domain
 					)) {
 						element.setAttribute('nonce', nonce);
 						return;
 					}
 
 					// Allow our playground initialization script
-					if (element.hasAttribute('data-playground-init')) {
+					if (element.hasAttribute('data-playground-init') ||
+						element.getAttribute('type') === 'module') {  // Allow module scripts for playground
 						element.setAttribute('nonce', nonce);
 						return;
 					}

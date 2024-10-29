@@ -23,11 +23,7 @@ const expandHomeDir = (filepath) => {
 const { ipcRenderer } = window.require('electron');
 
 const RepoPluginUploader = (data) => {
-	console.log("MY SITE", data);
 	const [uploadProgress, setUploadProgress] = useState({ step: 0, totalSteps: 5, chunkNumber: 0, totalChunks: 0 });
-	// @todo Add author pages.
-	// const [pluginPageUrl, setPluginPageUrl] = useState('');
-	// const [authorPageUrl, setAuthorPageUrl] = useState('');
 	const [apiKey, setApiKey] = useState('');
 	const [apiUrl, setApiUrl] = useState('');
 	const [bucketUrl, setBucketUrl] = useState('');
@@ -61,7 +57,6 @@ const RepoPluginUploader = (data) => {
 
 	const handleScaffoldSuccess = (scaffoldData) => {
 		console.log('Plugin scaffolded successfully:', scaffoldData);
-		// You can add any additional logic here, such as refreshing the plugin list
 	};
 
 
@@ -71,7 +66,6 @@ const RepoPluginUploader = (data) => {
 			if (result.success) {
 				console.log('Plugin scaffolded successfully');
 				setShowScaffoldModal(false);
-				// Update state or show success message
 			} else {
 				setScaffoldError(result.error || 'Failed to scaffold plugin');
 			}
@@ -82,7 +76,6 @@ const RepoPluginUploader = (data) => {
 	}, [scaffoldData]);
 
 	const getDefaultPaths = useCallback((siteName) => {
-		console.log('siteName:', siteName, 'site:', data.site);
 		// slugify the siteName
 		const slug = siteName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 		const pluginName = slug ? slug : 'xr-chess-block';
@@ -100,7 +93,7 @@ const RepoPluginUploader = (data) => {
 		return {
 			siteId: data.site.id || '',
 			sitePath: data.site.path || '',
-			userId: '', // New field for userId/organization
+			userId: '',
 			subDirectory: '',
 			pluginName: defaults.pluginName,
 			zipFilePath: defaults.zipPath,
@@ -133,12 +126,8 @@ const RepoPluginUploader = (data) => {
 				);
 				const envPath = path.join(pluginPath, '.env');
 
-				console.log("Checking .env path:", envPath);
-
 				if (await fs.pathExists(envPath)) {
-					console.log(".env file exists");
 					const envContent = await fs.readFile(envPath, 'utf8');
-					console.log("ENV content:", envContent);
 
 					// Parse the env content manually to handle potential formatting issues
 					const envVars = {};
@@ -148,8 +137,6 @@ const RepoPluginUploader = (data) => {
 							envVars[key.trim()] = valueParts.join('=').trim();
 						}
 					});
-
-					console.log("Parsed ENV vars:", envVars);
 
 					if (envVars.API_KEY) setApiKey(envVars.API_KEY);
 					if (envVars.PLUGIN_API_URL) setApiUrl(envVars.PLUGIN_API_URL);
