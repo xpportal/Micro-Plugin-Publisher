@@ -8,6 +8,8 @@ import generateRegisterHTML from './registrationTemplate';
 import generateRequestKeyRollHTML from './rollKeyTemplate';
 import { UserAuthDO } from './userAuthDO';
 import { PluginRegistryDO } from './PluginRegistryDO';
+import { sign } from '@noble/ed25519';
+import { FEDERATION_ENDPOINTS } from './federation';
 
 import { removeAuthor, removePlugin } from './management';
 
@@ -19,6 +21,21 @@ const CORS_HEADERS = {
 	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
+
+const FEDERATION_SECURITY = {
+	// Rate limiting for federation requests
+	MAX_REQUESTS_PER_MINUTE: 60,
+
+	// Maximum age for challenges
+	MAX_CHALLENGE_AGE: 5 * 60 * 1000, // 5 minutes
+
+	// Required headers for federation requests
+	REQUIRED_HEADERS: [
+		'X-Federation-Node-Id',
+		'X-Federation-Timestamp'
+	]
+};
+
 
 // Main worker class
 export default {
@@ -119,6 +136,7 @@ export default {
 	// The sheduled function to process download and activation queues.
 	async scheduled(controller, env, ctx) {
 		try {
+			// First handle existing download/activation processing
 			if (!env.DOWNLOAD_COUNTS || !env.PLUGIN_REGISTRY) {
 				console.error('Missing required KV namespaces');
 				return;
@@ -168,10 +186,10 @@ export default {
 				}
 			} while (cursor);
 
-			// Only update DO if we have changes
+			// Update registry if we have changes
 			if (updates.size > 0 || activations.size > 0) {
-				const id = env.PLUGIN_REGISTRY.idFromName("global");
-				const registry = env.PLUGIN_REGISTRY.get(id);
+				const registryId = env.PLUGIN_REGISTRY.idFromName("global");
+				const registry = env.PLUGIN_REGISTRY.get(registryId);
 
 				await registry.fetch(new Request('http://internal/update-counts', {
 					method: 'POST',
@@ -185,10 +203,11 @@ export default {
 			}
 
 		} catch (error) {
-			console.error('Queue processing error:', error);
+			console.error('Scheduled task error:', error);
 			console.error('Environment state:', {
 				hasDownloadCounts: !!env?.DOWNLOAD_COUNTS,
-				hasPluginRegistry: !!env?.PLUGIN_REGISTRY
+				hasPluginRegistry: !!env?.PLUGIN_REGISTRY,
+				hasFederation: !!env?.FEDERATION
 			});
 		}
 	},
@@ -1714,7 +1733,8 @@ export default {
 				headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
 			});
 		}
-	},
+	},	  
+	  
 
 	async fetch(request, env) {
 		const url = new URL(request.url);
@@ -1755,15 +1775,26 @@ export default {
 		}
 
 		// Authenticate non-GET requests (except certain public endpoints)
-		if (request.method !== 'GET' && !['/search', '/initiate-key-roll', '/verify-key-roll'].includes(path)) {
-			if (!await this.authenticateRequest(request, env)) {
-				return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-					status: 401,
-					headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-				});
-			}
+		if (request.method !== 'GET' && 
+			![
+			  '/search', 
+			  '/initiate-key-roll', 
+			  '/verify-key-roll', 
+			  // Federation endpoints should be public
+			  '/federation-info',
+			  '/federated/plugin-data', 
+			  '/verify-ownership',
+			  '/federated/download'
+			].includes(path)) {
+		  if (!await this.authenticateRequest(request, env)) {
+			return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+			  status: 401,
+			  headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+			});
+		  }
 		}
-
+		
+		
 		// Main request routing
 		switch (request.method) {
 			case 'GET': {
@@ -1771,6 +1802,16 @@ export default {
 					case '/': {
 						return this.handleHomepage(request, env);
 					}
+					case '/federation-info': {
+						return await FEDERATION_ENDPOINTS.handleFederationInfo(request, env);
+					}
+		
+					case '/federated/plugin-data': {
+						return await FEDERATION_ENDPOINTS.handlePluginData(request, env);
+					}
+					case '/federated/download': {
+						return await FEDERATION_ENDPOINTS.handlePluginDownload(request, env);
+					}		
 					case '/download': {
 						return this.handleDownload(request, env);
 					}
@@ -1939,7 +1980,9 @@ export default {
 
 						return await auth.fetch(internalRequest);
 					}
-
+					case '/verify-ownership': {
+						return await FEDERATION_ENDPOINTS.handleVerifyOwnership(request, env);
+					  }					
 					case '/verify-key-roll': {
 						const { gistUrl, verificationToken } = await request.json();
 						if (!gistUrl || !verificationToken) {

@@ -181,6 +181,26 @@ The system uses semantic versioning to manage plugin versions. Before any upload
 
 This endpoint determines if the new version can be uploaded based on the existing version in the system. It prevents uploading of older or identical versions.
 
+## Federation
+
+# generate signign
+node -e "
+const crypto = require('crypto');
+const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+const privPem = privateKey.export({type: 'pkcs8', format: 'pem'});
+const pubPem = publicKey.export({type: 'spki', format: 'pem'});
+console.log('Private:', privPem);
+console.log('Public:', pubPem);
+"
+
+# Store as secrets
+wrangler secret put FEDERATION_PRIVATE_KEY
+wrangler secret put FEDERATION_PUBLIC_KEY
+
+After joining, confirm your key:
+wrangler secret put FEDERATION_KEY
+
+
 ### Backup Creation
 
 Before updating an existing plugin, the system creates a backup of the current version:

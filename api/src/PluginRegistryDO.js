@@ -10,6 +10,68 @@ export class PluginRegistryDO {
 		this.initializeSchema();
 	}
 
+	async handleStats(request) {
+		try {
+			// Get basic stats
+			const baseStats = await this.sql.exec(`
+			SELECT 
+			  COUNT(DISTINCT p.id) as plugin_count,
+			  COUNT(DISTINCT p.author) as author_count,
+			  MAX(p.updated_at) as last_update,
+			  SUM(p.download_count) as total_downloads,
+			  SUM(p.activation_count) as total_activations,
+			  (
+				SELECT COUNT(DISTINCT tag) 
+				FROM plugin_tags
+			  ) as total_tags
+			FROM plugins p
+		  `).one();
+
+			// Get recent activity
+			const recentActivity = await this.sql.exec(`
+			SELECT 
+			  p.author,
+			  p.name,
+			  p.version,
+			  p.updated_at
+			FROM plugins p
+			ORDER BY p.updated_at DESC
+			LIMIT 5
+		  `).toArray();
+
+			// Format the response
+			const stats = {
+				plugins: {
+					total: baseStats.plugin_count,
+					downloads: baseStats.total_downloads,
+					activations: baseStats.total_activations
+				},
+				authors: {
+					total: baseStats.author_count
+				},
+				tags: {
+					total: baseStats.total_tags
+				},
+				lastUpdate: baseStats.last_update,
+				recentActivity: recentActivity
+			};
+
+			return new Response(JSON.stringify(stats), {
+				headers: { 'Content-Type': 'application/json' }
+			});
+		} catch (error) {
+			console.error('Error getting stats:', error);
+			return new Response(JSON.stringify({
+				error: 'Internal server error',
+				details: error.message
+			}), {
+				status: 500,
+				headers: { 'Content-Type': 'application/json' }
+			});
+		}
+	}
+
+
 	async addMissingColumns() {
 		try {
 			const columns = this.sql.exec(`PRAGMA table_info(plugins)`).toArray();
@@ -556,6 +618,8 @@ export class PluginRegistryDO {
 		const url = new URL(request.url);
 
 		switch (url.pathname) {
+			case '/stats':
+				return await this.handleStats(request);
 			case '/update-counts': {
 				const body = await request.json();
 				const updates = new Map(body.updates);

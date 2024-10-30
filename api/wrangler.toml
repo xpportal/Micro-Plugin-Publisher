@@ -35,6 +35,7 @@ new_sqlite_classes = ["UserAuthDO"]
 
 [vars]
 PLUGIN_BUCKET_URL = "https://micro-plugin-publisher.95d5ca589c39bf4189b080cfc8417c8e.r2.cloudflarestorage.com"
+NODE_ID = "pluginpublisher:com"
 
 [[r2_buckets]]
 binding = "PLUGIN_BUCKET"
