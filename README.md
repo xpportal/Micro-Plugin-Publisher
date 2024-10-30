@@ -4,7 +4,8 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
 
 #WIP! WAIT ON USING...days maybe
 
-## For the federated version see this branch for the alpha: https://github.com/xpportal/Plugin-Publisher/tree/federated-option
+## The federated version is here: https://github.com/xpportal/Plugin-Publisher/tree/federated-option
+More on federation in the wider experimental API: https://github.com/xpportal/Plugin-Federation-Network
 
 - API Setup: [`Plugin Publisher API Setup`](api/README.md)
 
