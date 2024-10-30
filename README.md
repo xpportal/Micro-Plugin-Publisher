@@ -4,6 +4,8 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
 
 #WIP! WAIT ON USING...days maybe
 
+## For the federated version see this branch for the alpha: https://github.com/xpportal/Plugin-Publisher/tree/federated-option
+
 - API Setup: [`Plugin Publisher API Setup`](api/README.md)
 
 ![Micro Plugin Publisher Preview](docs/assets/micro-plugin-publisher-preview-update-2.jpg)
@@ -24,12 +26,12 @@ Micro Plugin Publisher is a Local WP add-on that streamlines the process of publ
 ![Plugin Page](docs/assets/plugin-page.jpg)
 
 Example Plugin Page:
-https://micro-plugin-publisher.sxpdigital.workers.dev/directory/antpb/xr-publisher
+https://pluginpublisher.com/directory/antpb/xr-publisher
 
 ![Author Page](docs/assets/author-page.jpg)
 
 Example Author Page:
-https://micro-plugin-publisher.sxpdigital.workers.dev/author/antpb
+https://pluginpublisher.com/author/antpb
 
 Example 
 
