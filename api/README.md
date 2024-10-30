@@ -112,6 +112,11 @@ The Plugin Publishing System provides the following endpoints:
 - `/update-author-info`: Update author information
 - `/backup-plugin`: Create backup of currently live files
 - `/clear-cache`: Clear cached responses (authenticated)
+- `/verify-ownership`: Used for federated instances to validate ownership.
+- `/federated/plugin-data`: Provides signed plugin data to federation layer. @todo implement federation layer side
+- `/federated/download`: Provides signed plugin zip file to federation layer. @todo implement federation layer side
+- `/federation-info`: Provides information about the instance and the recent activity.
+
 
 ### Authentication Requirements
 
